@@ -4,6 +4,8 @@ A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得�
 
 Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 
+A prominent indicator at the top shows the latest signed index-point deviation, its common closing date, and which index has the higher numerical level. It updates with the published data and stays on the latest observation while older chart dates are inspected.
+
 ## Three charts
 
 | Chart | Y-axis calculation |

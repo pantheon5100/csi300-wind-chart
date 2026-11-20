@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="沪深300全收益指数与万得偏债混合型基金指数：累计收益率、原始指数点位和原始点位差。每日更新数据。">
   <title>沪深300全收益与万得偏债混合</title>
-  <link rel="stylesheet" href="./styles.css?v=20261120-level-gap">
-  <script src="./app.js?v=20261120-level-gap" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=20261120-gap-indicator">
+  <script src="./app.js?v=20261120-gap-indicator" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#charts">跳到图表</a>
@@ -17,6 +17,17 @@
       <div class="date-row">
         <p>共同数据截至 <strong id="as-of">正在读取</strong><span id="stale-badge" class="stale" hidden></span></p>
         <button id="refresh-button" type="button" disabled>正在检查</button>
+      </div>
+      <div id="current-deviation" class="deviation-indicator" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <div>
+          <p class="deviation-label">当前指数偏离</p>
+          <strong id="current-deviation-value" class="deviation-value">—</strong>
+        </div>
+        <div class="deviation-context">
+          <p>沪深300全收益点位 − 万得偏债混合点位</p>
+          <p id="current-deviation-direction"></p>
+          <p class="deviation-date">最新共同收盘 · <time id="current-deviation-date"></time></p>
+        </div>
       </div>
       <p class="schedule">每日 08:00 北京时间（09:00 韩国时间）尝试更新一次；行情日期以上方标注为准。</p>
       <ul class="sources" aria-label="数据来源">

@@ -201,13 +201,19 @@
   }
   function renderMetadata() {
     const latest = rows.at(-1);
+    const latestDifference = latest[1] - latest[2];
     setText('as-of', payload.as_of);
     setText('period', `${payload.start_date} — ${payload.as_of} · 共同日期的日度数据 · 累计收益起点 0%`);
     setText('return-stock', percentage(latest[3]));
     setText('return-wind', percentage(latest[4], true));
     setText('level-stock', level(latest[1]));
     setText('level-wind', level(latest[2]));
-    setText('gap-total', gap(latest[1] - latest[2]));
+    setText('gap-total', gap(latestDifference));
+    setText('current-deviation-value', gap(latestDifference));
+    setText('current-deviation-direction', Math.abs(latestDifference) < 0.005 ? '两指数点位相同' : latestDifference > 0 ? '沪深300全收益点位较高' : '万得偏债混合点位较高');
+    setText('current-deviation-date', payload.as_of);
+    $('current-deviation-date').dateTime = payload.as_of;
+    $('current-deviation').hidden = false;
     setText('wind-baseline', payload.baseline['885003.WI'].toFixed(2));
     setText('generated-at', clockFormat.format(new Date(payload.generated_at)));
     setText('point-count', `共 ${rows.length.toLocaleString('zh-CN')} 个日期。`);
