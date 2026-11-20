@@ -59,20 +59,7 @@ section+section{padding-top:18px;border-top:1px solid var(--border)}
 .note.source-cached{color:#9b681b}
 .source-options ul{padding-left:20px;overflow-wrap:anywhere}
 .source-check-note{color:var(--muted)}
-.crossings{margin-top:15px}
-.crossings h3{font-size:15px;margin:0 0 5px;font-weight:600}
-.crossing-definition{font-size:12px;color:var(--muted);margin:7px 0 11px}
-.crossing-definition summary,.source-options summary{cursor:pointer;width:fit-content}
-.crossing-definition p{max-width:880px}
-.crossings-scroll{max-height:440px;overflow:auto;border:1px solid var(--border)}
-.crossings-table{width:100%;min-width:690px;border-collapse:separate;border-spacing:0;font-size:12px;font-variant-numeric:tabular-nums}
-.crossings-table th,.crossings-table td{padding:7px 9px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;white-space:nowrap}
-.crossings-table thead th{position:sticky;top:0;z-index:1;background:#f7f8fa;color:#515964;font-size:11px;font-weight:600}
-.crossings-table tbody th{color:var(--muted);font-weight:400}
-.crossings-table tbody tr:last-child>*{border-bottom:0}
-.crossings-table tbody tr:hover{background:#fafbfc}
-.crossings-table .number{text-align:right}
-.crossing-date{border:0;border-radius:0;padding:0;min-height:26px;color:#2469a1;background:transparent;text-decoration:underline;text-underline-offset:3px;font-size:12px}
+.source-options summary{cursor:pointer;width:fit-content}
 .loading{padding:70px 0;color:var(--muted);font-size:13px;text-align:center}
 footer{border-top:1px solid var(--border);padding-top:12px;color:var(--muted);font-size:11px;line-height:1.8}
 footer p{margin:5px 0}

@@ -1,6 +1,6 @@
 # 沪深300全收益 vs 万得偏债混合型基金
 
-A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得偏债混合型基金指数 885003.WI**. It displays three charts, crossover dates and intervals, source health, and explicit source links. The page uses native SVG with no framework, CDN, or API key.
+A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得偏债混合型基金指数 885003.WI**. It displays three charts, crossover markers with hover details, source health, and explicit source links. The page uses native SVG with no framework, CDN, or API key.
 
 Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 
@@ -18,14 +18,14 @@ The cumulative-return baseline is fixed at **2004-12-31 = 0%**. H00300 uses **10
 
 ## Crossovers and intervals
 
-The deviation chart marks a crossover on the **first observed daily close on the opposite side of zero**. Its table reports the date, which index takes the lead, calendar days since the previous crossover, elapsed common-data observations, and the actual deviation at confirmation. Click a table date to inspect that point.
+The deviation chart marks a crossover on the **first observed daily close on the opposite side of zero**. Hover over a marked observation to see its date, which index takes the lead, calendar days since the previous crossover, elapsed common-data observations, and the actual deviation at confirmation. The chart's keyboard controls can also inspect these observations.
 
 - The shared initial 0% point is not a crossover. A touch of zero followed by a return to the same side is not counted. A zero plateau counts once, when the next nonzero close confirms a reversal.
 - Daily closes locate the confirmation date; they do not establish an exact intraday crossing time. A marker therefore sits on the actual close, not an invented zero observation.
-- Calendar days are ordinary date differences. Common-data intervals count observations after the previous event through the current event. The first event has no previous interval; the current unfinished interval is shown separately.
+- Calendar days are ordinary date differences. Common-data intervals count observations after the previous event through the current event. The first event has no previous interval.
 - Crossovers depend on the **2004-12-31** starting date and the stated baselines. They establish equal cumulative returns from that start, not fair value, equilibrium, or a validated buy/sell rule.
 
-On the dataset through **2026-11-19**, there are **33** crossings. The most recent is **2014-07-24**; the unfinished interval is **4,501 calendar days / 2,994 common-data intervals**. These values are calculated from the downloaded data on every page load, so future crossings appear automatically.
+On the dataset through **2026-11-19**, there are **33** crossings, most recently **2014-07-24**. Markers and hover intervals are calculated from the downloaded data on every page load, so future crossings appear automatically.
 
 ## Daily refresh
 
@@ -108,7 +108,7 @@ By default, the local updater returns an error if no valid live provider pair ex
 
 | Path | Purpose |
 | --- | --- |
-| site/index.html, site/styles.css, site/app.js | Three charts, crossover table, source links and source health |
+| site/index.html, site/styles.css, site/app.js | Three charts, crossover markers and hover details, source links and source health |
 | site/data.json | Index levels, cumulative returns, and source metadata |
 | scripts/update_data.py | Provider selection, retained history, alignment and validation |
 | scripts/backup_sources.py, scripts/wind_backup.py | Exact-index public backup adapters |

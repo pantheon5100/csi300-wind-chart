@@ -58,25 +58,6 @@
           <svg id="gap-chart" class="chart" role="img" tabindex="0" aria-labelledby="gap-title gap-description" aria-describedby="interaction-help"></svg>
           <div id="gap-tooltip" class="tooltip" hidden aria-hidden="true"></div>
         </div>
-        <div class="crossings" aria-labelledby="crossings-heading">
-          <h3 id="crossings-heading">交叉日期与间隔</h3>
-          <p id="crossing-count" class="note"></p>
-          <p id="crossing-ongoing" class="note" hidden></p>
-          <details class="crossing-definition">
-            <summary>交叉与间隔如何计算</summary>
-            <p>交叉指两条累计收益曲线的领先关系发生反转，即收益差跨越零线。记录首次在另一侧收盘的共同数据日，不推算盘中交叉时刻。初始起点相等不计入；触及零线后回到原侧不计入；连续相等后在另一侧收盘仅记一次。</p>
-            <p>日历天间隔按两次确认日期之差计算；共同数据日间隔计入本次交叉日、不计上次交叉日。首次交叉没有前次间隔。交叉结果依赖固定起点及万得近似基准值。</p>
-          </details>
-          <div class="crossings-scroll" role="region" aria-label="全部交叉日期与间隔，可横向和纵向滚动" tabindex="0">
-            <table class="crossings-table">
-              <caption class="sr-only">累计收益曲线交叉记录：确认日期、方向及距上一次交叉的时间</caption>
-              <thead>
-                <tr><th scope="col">序号</th><th scope="col">交叉确认日</th><th scope="col">领先关系变化</th><th scope="col">间隔（日历天）</th><th scope="col">间隔（共同数据日）</th><th scope="col">当日收益差（百分点）</th></tr>
-              </thead>
-              <tbody id="crossings-body"></tbody>
-            </table>
-          </div>
-        </div>
       </section>
     </div>
 

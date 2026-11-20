@@ -81,63 +81,6 @@
   function setText(id, value) { $(id).textContent = value; }
   function crossingDirection(event) { return event.direction === 'stock_above' ? '沪深300转为领先' : '万得转为领先'; }
 
-  function renderCrossings() {
-    const body = $('crossings-body');
-    body.replaceChildren();
-    setText('crossing-count', `共 ${crossingInfo.events.length} 次已确认交叉。圆点标出交叉确认日及其实际收盘收益差。`);
-    for (const event of crossingInfo.events) {
-      const tr = document.createElement('tr');
-      tr.id = `crossing-${event.number}`;
-      const number = document.createElement('th');
-      number.scope = 'row';
-      number.textContent = String(event.number);
-      tr.append(number);
-      const date = document.createElement('td');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'crossing-date';
-      button.textContent = event.date;
-      button.setAttribute('aria-label', `在收益差图中查看第 ${event.number} 次交叉，${event.date}`);
-      button.addEventListener('click', () => {
-        const chart = charts.find(item => item.key === 'gap');
-        chart.selectedIndex = event.index;
-        chart.pinned = true;
-        chart.svg.focus({ preventScroll: true });
-        showPoint(chart, event.index, undefined, true);
-        chart.wrap.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      });
-      date.append(button);
-      tr.append(date);
-      const direction = document.createElement('td');
-      direction.className = event.direction === 'stock_above' ? 'stock' : 'wind';
-      direction.textContent = crossingDirection(event);
-      tr.append(direction);
-      for (const value of [event.calendarDays, event.dataIntervals]) {
-        const cell = document.createElement('td');
-        cell.className = 'number';
-        cell.textContent = value === null ? '—' : value.toLocaleString('zh-CN');
-        if (value === null) cell.title = '首次交叉，没有上一次交叉可供比较';
-        tr.append(cell);
-      }
-      const difference = document.createElement('td');
-      difference.className = 'number';
-      difference.textContent = `约 ${event.difference > 0 ? '+' : ''}${event.difference.toFixed(3)}`;
-      tr.append(difference);
-      body.append(tr);
-    }
-    if (!crossingInfo.events.length) {
-      const tr = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 6;
-      cell.textContent = '当前区间没有符合定义的交叉记录。';
-      tr.append(cell);
-      body.append(tr);
-    }
-    const ongoing = crossingInfo.ongoing;
-    $('crossing-ongoing').hidden = !ongoing;
-    if (ongoing) setText('crossing-ongoing', `截至 ${ongoing.toDate}，距最近一次交叉 ${ongoing.fromDate} 已经过 ${ongoing.calendarDays.toLocaleString('zh-CN')} 个日历天／${ongoing.dataIntervals.toLocaleString('zh-CN')} 个共同数据日；本段尚未结束。`);
-  }
-
   const charts = [
     {
       key: 'returns', title: '累计收益率', unit: '累计收益率（%）', tick: value => `${axisFormat.format(value)}%`,
@@ -306,7 +249,6 @@
       crossingInfo = calculateCrossings(rows);
       fingerprint = nextFingerprint;
       renderMetadata();
-      renderCrossings();
       if (changed) {
         $('loading').hidden = true;
         $('charts').hidden = false;
@@ -379,7 +321,7 @@
     chart.svg.setAttribute('width', String(width));
     chart.svg.setAttribute('height', String(height));
     append(chart.svg, 'title', { id: `${chart.key}-title` }, chart.title);
-    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `${payload.start_date}至${payload.as_of}，${rows.length}个共同日期。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。使用真实记录之间的直线连接。${chart.key === 'gap' ? `圆点标记 ${crossingInfo.events.length} 次交叉确认日，全部日期和间隔见下方表格。` : ''}`);
+    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `${payload.start_date}至${payload.as_of}，${rows.length}个共同日期。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。使用真实记录之间的直线连接。${chart.key === 'gap' ? `圆点标记 ${crossingInfo.events.length} 次交叉确认日，可在图中查看日期与间隔。` : ''}`);
     append(chart.svg, 'text', { x: frame.left, y: 12 }, chart.unit);
     const grid = append(chart.svg, 'g', { 'aria-hidden': 'true' });
     for (let tick = yMin; tick <= yMax + step / 100; tick += step) {
