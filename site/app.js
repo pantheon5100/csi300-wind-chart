@@ -1,6 +1,57 @@
 (() => {
   'use strict';
 
+  // A crossing is confirmed at the first observed close on the opposite side.
+  // Zero touches and zero plateaus do not count until the nonzero sign reverses.
+  function calculateCrossings(data, epsilon = 1e-9) {
+    if (!Array.isArray(data) || !Number.isFinite(epsilon) || epsilon < 0) throw new TypeError('Invalid crossing input');
+    const events = [];
+    let previousDate = '';
+    let previousSign = 0;
+    let previousSideIndex = -1;
+    for (let index = 0; index < data.length; index += 1) {
+      const row = data[index];
+      if (!Array.isArray(row) || !Number.isFinite(dayValue(row[0])) || row[0] <= previousDate || !Number.isFinite(row[3]) || !Number.isFinite(row[4])) throw new TypeError('Crossings require ordered dates and finite cumulative returns');
+      previousDate = row[0];
+      const difference = row[3] - row[4];
+      const sign = difference > epsilon ? 1 : difference < -epsilon ? -1 : 0;
+      if (sign === 0) continue;
+      if (previousSign && sign !== previousSign) {
+        const prior = events.at(-1);
+        events.push({
+          number: events.length + 1,
+          date: row[0],
+          index,
+          direction: sign > 0 ? 'stock_above' : 'wind_above',
+          difference,
+          previousSideDate: data[previousSideIndex][0],
+          equalityObservations: index - previousSideIndex - 1,
+          calendarDays: prior ? Math.round((dayValue(row[0]) - dayValue(prior.date)) / 86400000) : null,
+          dataIntervals: prior ? index - prior.index : null,
+        });
+      }
+      previousSign = sign;
+      previousSideIndex = index;
+    }
+    const latestEvent = events.at(-1);
+    const lastRow = data.at(-1);
+    return {
+      events,
+      ongoing: latestEvent ? {
+        fromDate: latestEvent.date,
+        toDate: lastRow[0],
+        calendarDays: Math.round((dayValue(lastRow[0]) - dayValue(latestEvent.date)) / 86400000),
+        dataIntervals: data.length - 1 - latestEvent.index,
+      } : null,
+    };
+  }
+
+  // Keep the calculation independently testable without a DOM or browser.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { calculateCrossings };
+    return;
+  }
+
   const NS = 'http://www.w3.org/2000/svg';
   const CHECK_INTERVAL = 24 * 60 * 60 * 1000;
   const FIXED_START = '2004-12-31';
@@ -16,6 +67,7 @@
   let payload = null;
   let rows = [];
   let stamps = [];
+  let crossingInfo = { events: [], ongoing: null };
   let fingerprint = '';
   let pending = false;
   let lastCheck = 0;
@@ -27,6 +79,64 @@
   function level(value, approximate = false) { return `${approximate ? '约 ' : ''}${levelFormat.format(value)} 点`; }
   function gap(value) { return `约 ${signed(value)} 个百分点`; }
   function setText(id, value) { $(id).textContent = value; }
+  function crossingDirection(event) { return event.direction === 'stock_above' ? '沪深300转为领先' : '万得转为领先'; }
+
+  function renderCrossings() {
+    const body = $('crossings-body');
+    body.replaceChildren();
+    setText('crossing-count', `共 ${crossingInfo.events.length} 次已确认交叉。圆点标出交叉确认日及其实际收盘收益差。`);
+    for (const event of crossingInfo.events) {
+      const tr = document.createElement('tr');
+      tr.id = `crossing-${event.number}`;
+      const number = document.createElement('th');
+      number.scope = 'row';
+      number.textContent = String(event.number);
+      tr.append(number);
+      const date = document.createElement('td');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'crossing-date';
+      button.textContent = event.date;
+      button.setAttribute('aria-label', `在收益差图中查看第 ${event.number} 次交叉，${event.date}`);
+      button.addEventListener('click', () => {
+        const chart = charts.find(item => item.key === 'gap');
+        chart.selectedIndex = event.index;
+        chart.pinned = true;
+        chart.svg.focus({ preventScroll: true });
+        showPoint(chart, event.index, undefined, true);
+        chart.wrap.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      });
+      date.append(button);
+      tr.append(date);
+      const direction = document.createElement('td');
+      direction.className = event.direction === 'stock_above' ? 'stock' : 'wind';
+      direction.textContent = crossingDirection(event);
+      tr.append(direction);
+      for (const value of [event.calendarDays, event.dataIntervals]) {
+        const cell = document.createElement('td');
+        cell.className = 'number';
+        cell.textContent = value === null ? '—' : value.toLocaleString('zh-CN');
+        if (value === null) cell.title = '首次交叉，没有上一次交叉可供比较';
+        tr.append(cell);
+      }
+      const difference = document.createElement('td');
+      difference.className = 'number';
+      difference.textContent = `约 ${event.difference > 0 ? '+' : ''}${event.difference.toFixed(3)}`;
+      tr.append(difference);
+      body.append(tr);
+    }
+    if (!crossingInfo.events.length) {
+      const tr = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 6;
+      cell.textContent = '当前区间没有符合定义的交叉记录。';
+      tr.append(cell);
+      body.append(tr);
+    }
+    const ongoing = crossingInfo.ongoing;
+    $('crossing-ongoing').hidden = !ongoing;
+    if (ongoing) setText('crossing-ongoing', `截至 ${ongoing.toDate}，距最近一次交叉 ${ongoing.fromDate} 已经过 ${ongoing.calendarDays.toLocaleString('zh-CN')} 个日历天／${ongoing.dataIntervals.toLocaleString('zh-CN')} 个共同数据日；本段尚未结束。`);
+  }
 
   const charts = [
     {
@@ -89,6 +199,60 @@
     $('stale-badge').hidden = days <= 5;
     setText('stale-badge', days > 5 ? `数据距今 ${days} 天` : '');
   }
+  function renderSourceHealth() {
+    const update = payload.update_status;
+    const sourceStatus = $('source-status');
+    const hasUpdate = update && typeof update.message === 'string' && update.message.trim();
+    sourceStatus.hidden = !hasUpdate;
+    sourceStatus.classList.toggle('source-cached', update?.outcome === 'cached');
+    if (hasUpdate) {
+      const checkedAt = Number.isFinite(Date.parse(update.checked_at)) ? `（检查于 ${clockFormat.format(new Date(update.checked_at))}，北京时间）` : '';
+      sourceStatus.textContent = `${update.message}${checkedAt}`;
+    } else sourceStatus.textContent = '';
+
+    const options = $('source-options');
+    options.replaceChildren();
+    const statuses = { available: '可用', older: '日期较旧', failed: '请求失败', rejected: '未通过校验', unverified: '未核验' };
+    const precisionNotes = [];
+    for (const code of ['H00300', '885003.WI']) {
+      const source = payload.sources[code];
+      if (typeof source.precision === 'string' && source.precision.trim()) precisionNotes.push(`${code}：${source.precision}`);
+      if (typeof source.historical_source_note === 'string' && source.historical_source_note.trim()) precisionNotes.push(source.historical_source_note);
+      if (!Array.isArray(source.checks)) continue;
+      for (const check of source.checks) {
+        if (!check || typeof check.name !== 'string') continue;
+        const item = document.createElement('li');
+        item.append(document.createTextNode(`${code} · ${check.role === 'fallback' ? '备用' : '主来源'}：`));
+        let url;
+        try { url = new URL(check.url); } catch { url = null; }
+        if (url && ['http:', 'https:'].includes(url.protocol)) {
+          const link = document.createElement('a');
+          link.href = url.href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = check.name;
+          item.append(link);
+        } else item.append(document.createTextNode(check.name));
+        const asOf = Number.isFinite(dayValue(check.as_of)) ? `，截至 ${check.as_of}` : '';
+        const selected = source.mode !== 'cached' && check.provider_id && check.provider_id === source.provider_id ? '，本次使用' : '';
+        item.append(document.createTextNode(` · ${statuses[check.status] || '状态未知'}${asOf}${selected}`));
+        if (typeof check.message === 'string' && check.message.trim()) {
+          const note = document.createElement('span');
+          note.className = 'source-check-note';
+          note.textContent = `。${check.message}`;
+          item.append(note);
+        }
+        options.append(item);
+      }
+    }
+    $('source-options-details').hidden = !options.childElementCount;
+    if (Array.isArray(update?.warnings)) for (const warning of update.warnings) {
+      if (typeof warning === 'string' && warning.trim()) precisionNotes.push(warning);
+    }
+    const notes = [...new Set(precisionNotes)];
+    $('source-precision-note').hidden = !notes.length;
+    setText('source-precision-note', notes.join('；'));
+  }
   function renderMetadata() {
     const latest = rows.at(-1);
     setText('as-of', payload.as_of);
@@ -105,8 +269,11 @@
       const source = payload.sources[code];
       $(`${key}-source`).href = source.url;
       $(`${key}-source`).title = source.name || '';
-      setText(`${key}-source-date`, `截至 ${source.as_of}`);
+      if (source.name) setText(`${key}-source`, source.name);
+      const mode = { primary: '主来源', fallback: '备用来源', cached: '保留上次有效数据' }[source.mode];
+      setText(`${key}-source-date`, `截至 ${source.as_of}${mode ? ` · ${mode}` : ''}`);
     }
+    renderSourceHealth();
     updateStaleness();
   }
   function scheduleNextCheck() {
@@ -136,8 +303,10 @@
       payload = candidate;
       rows = candidate.data;
       stamps = rows.map(row => dayValue(row[0]));
+      crossingInfo = calculateCrossings(rows);
       fingerprint = nextFingerprint;
       renderMetadata();
+      renderCrossings();
       if (changed) {
         $('loading').hidden = true;
         $('charts').hidden = false;
@@ -210,7 +379,7 @@
     chart.svg.setAttribute('width', String(width));
     chart.svg.setAttribute('height', String(height));
     append(chart.svg, 'title', { id: `${chart.key}-title` }, chart.title);
-    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `${payload.start_date}至${payload.as_of}，${rows.length}个共同日期。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。使用真实记录之间的直线连接。`);
+    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `${payload.start_date}至${payload.as_of}，${rows.length}个共同日期。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。使用真实记录之间的直线连接。${chart.key === 'gap' ? `圆点标记 ${crossingInfo.events.length} 次交叉确认日，全部日期和间隔见下方表格。` : ''}`);
     append(chart.svg, 'text', { x: frame.left, y: 12 }, chart.unit);
     const grid = append(chart.svg, 'g', { 'aria-hidden': 'true' });
     for (let tick = yMin; tick <= yMax + step / 100; tick += step) {
@@ -235,6 +404,17 @@
       const path = rows.map((row, index) => `${index ? 'L' : 'M'}${x(stamps[index]).toFixed(2)},${y(series.value(row)).toFixed(2)}`).join('');
       append(paths, 'path', { d: path, class: `series-path ${series.key}-path`, stroke: COLORS[series.key] });
       append(paths, 'circle', { cx: x(t1), cy: y(series.value(rows.at(-1))), r: 2.6, fill: COLORS[series.key] });
+    }
+    if (chart.key === 'gap') {
+      const markers = append(chart.svg, 'g', { class: 'crossing-markers', 'clip-path': `url(#${chart.key}-clip)`, 'aria-hidden': 'true' });
+      for (const event of crossingInfo.events) {
+        const marker = append(markers, 'circle', {
+          cx: x(stamps[event.index]), cy: y(event.difference), r: 3.3,
+          class: 'crossing-marker', fill: COLORS[event.direction === 'stock_above' ? 'stock' : 'wind'],
+          'data-crossing-number': event.number,
+        });
+        append(marker, 'title', {}, `第 ${event.number} 次：${event.date}，${crossingDirection(event)}`);
+      }
     }
     const hover = append(chart.svg, 'g', { id: `${chart.key}-hover`, display: 'none', 'pointer-events': 'none', 'aria-hidden': 'true' });
     append(hover, 'line', { id: `${chart.key}-guide`, class: 'hover-guide', y1: frame.top, y2: frame.bottom });
@@ -274,6 +454,17 @@
       line.append(label, value);
       chart.tooltip.append(line);
     }
+    const crossing = chart.key === 'gap' ? crossingInfo.events.find(event => event.index === chart.selectedIndex) : null;
+    if (crossing) {
+      const note = document.createElement('p');
+      note.className = 'tooltip-note';
+      note.textContent = `交叉 #${crossing.number} · ${crossingDirection(crossing)}`;
+      chart.tooltip.append(note);
+      const interval = document.createElement('p');
+      interval.className = 'tooltip-note';
+      interval.textContent = crossing.calendarDays === null ? '首次交叉' : `距上次 ${crossing.calendarDays} 日历天／${crossing.dataIntervals} 共同数据日`;
+      chart.tooltip.append(interval);
+    }
     chart.tooltip.hidden = false;
     const scale = chart.wrap.clientWidth / width;
     const tooltipWidth = chart.tooltip.offsetWidth;
@@ -286,7 +477,7 @@
     const top = Math.max(frame.top * scale, Math.min(desiredTop, height * scale - tooltipHeight - 8));
     chart.tooltip.style.left = `${left}px`;
     chart.tooltip.style.top = `${top}px`;
-    if (announce) setText('chart-announcement', `${chart.title}，${row[0]}，${chart.series.map(series => `${series.name}${series.format(row)}`).join('，')}`);
+    if (announce) setText('chart-announcement', `${chart.title}，${row[0]}，${chart.series.map(series => `${series.name}${series.format(row)}`).join('，')}${crossing ? `，第 ${crossing.number} 次交叉，${crossingDirection(crossing)}` : ''}`);
   }
   function handlePointer(chart, event) {
     if (!rows.length || !chart.geometry) return;

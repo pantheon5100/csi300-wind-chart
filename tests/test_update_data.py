@@ -171,7 +171,7 @@ class UpdateDataTests(unittest.TestCase):
             output = Path(directory) / "data.json"
             output.write_text(json.dumps(self.snapshot), encoding="utf-8")
             original = output.read_bytes()
-            with mock.patch.object(updater, "fetch_json", side_effect=URLError("offline")), redirect_stderr(io.StringIO()):
+            with mock.patch.object(updater, "fetch_json", side_effect=URLError("offline")), mock.patch.object(updater, "fetch_csi_backup", side_effect=URLError("offline")), mock.patch.object(updater, "fetch_wind_backup", side_effect=URLError("offline")), redirect_stderr(io.StringIO()):
                 result = updater.main(["--output", str(output)])
             self.assertEqual(result, 1)
             self.assertEqual(output.read_bytes(), original)

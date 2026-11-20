@@ -1,6 +1,8 @@
 # 沪深300全收益 vs 万得偏债混合型基金
 
-A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得偏债混合型基金指数 885003.WI**. It displays three charts, the latest common data date, and explicit source links. The page uses native SVG with no framework, CDN, or API key.
+A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得偏债混合型基金指数 885003.WI**. It displays three charts, crossover dates and intervals, source health, and explicit source links. The page uses native SVG with no framework, CDN, or API key.
+
+Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 
 ## Three charts
 
@@ -14,11 +16,22 @@ The cumulative-return baseline is fixed at **2004-12-31 = 0%**. H00300 uses **10
 
 **Raw index levels have different original bases.** Their absolute point values are not directly comparable as investment gains. Use the cumulative-return chart or return-difference chart to compare performance from the common starting date. The reconstructed Wind baseline is approximate in all charts.
 
+## Crossovers and intervals
+
+The deviation chart marks a crossover on the **first observed daily close on the opposite side of zero**. Its table reports the date, which index takes the lead, calendar days since the previous crossover, elapsed common-data observations, and the actual deviation at confirmation. Click a table date to inspect that point.
+
+- The shared initial 0% point is not a crossover. A touch of zero followed by a return to the same side is not counted. A zero plateau counts once, when the next nonzero close confirms a reversal.
+- Daily closes locate the confirmation date; they do not establish an exact intraday crossing time. A marker therefore sits on the actual close, not an invented zero observation.
+- Calendar days are ordinary date differences. Common-data intervals count observations after the previous event through the current event. The first event has no previous interval; the current unfinished interval is shown separately.
+- Crossovers depend on the **2004-12-31** starting date and the stated baselines. They establish equal cumulative returns from that start, not fair value, equilibrium, or a validated buy/sell rule.
+
+On the dataset through **2026-11-19**, there are **33** crossings. The most recent is **2014-07-24**; the unfinished interval is **4,501 calendar days / 2,994 common-data intervals**. These values are calculated from the downloaded data on every page load, so future crossings appear automatically.
+
 ## Daily refresh
 
-- **Source data:** GitHub Actions checks both sources once daily at **09:00 Korea time / 08:00 Beijing time**. A push to the default branch or a manual workflow run also refreshes and deploys the site.
+- **Source data:** GitHub Actions checks both indices' primary and backup providers once daily at **09:00 Korea time / 08:00 Beijing time**. A push to the default branch or a manual workflow run also refreshes and deploys the site.
 - **Webpage:** loads the published dataset when opened, checks again every **24 hours** while open, and offers a manual check button. These browser checks read the site's data file; they do not trigger a source fetch or a GitHub workflow.
-- **Failure handling:** data is validated before deployment. A failed source or invalid update leaves the last successful live site available; a failed browser check preserves the chart already displayed.
+- **Failure handling:** verified backup providers can append data when a primary is unavailable or slower. If no valid aligned pair is available, the workflow publishes the **last verified dataset** with a visible cached-data notice and a source-check timestamp. It never substitutes a different index or moves the data cutoff backward. An invalid previous snapshot still stops deployment. A failed browser check preserves the chart already displayed.
 - **Dates:** the latest common source date is shown on the page. Weekends and holidays do not create new observations. A notice appears when the data date is more than five calendar days old, which may also occur during long market holidays.
 
 The schedule in .github/workflows/update-and-deploy.yml is UTC:
@@ -32,16 +45,26 @@ GitHub schedules may be delayed or skipped under load. **Scheduled workflows in 
 
 ## Sources and precision
 
-| Index | Data source |
-| --- | --- |
-| H00300 | China Securities Index official daily history: https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H00300&startDate=20041231&endDate=YYYYMMDD |
-| 885003.WI | Public mirror: <https://ashare.laoqianriritan.com/data/fund_index.json>, specifically series["885003.WI"] |
+| Index | Primary | Backup |
+| --- | --- | --- |
+| H00300 | China Securities Index [official daily history](https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=H00300&startDate=20041231&endDate=20261120) | [CharlesPai public research page](https://research.charlespai.com/cn/), exact H00300 closes; page credits Tushare Pro |
+| 885003.WI | [老钱 public JSON mirror](https://ashare.laoqianriritan.com/data/fund_index.json), specifically series["885003.WI"] | [FundDB / 韭圈儿 raw-close API](https://ai2.jiucaishuo.com/api/index-valuation/history?code=885003.WI&metric=close&years2=10), cross-checked with its [identity endpoint](https://ai2.jiucaishuo.com/api/index-valuation/detail?code=885003.WI) |
 
-For the CSI URL, YYYYMMDD is the retrieval date. The updater fills it automatically. Mirror homepage: <https://ashare.laoqianriritan.com/>. The initial Wind history was independently cross-checked using 韭圈儿: <https://funddb.cn/>.
+The updater fills the CSI URL's endDate with the retrieval date. Mirror homepages: <https://ashare.laoqianriritan.com/> and <https://funddb.cn/>. The backup providers use different hosts from the primary providers; this reduces host-level dependence but does not prove their entire upstream data chains are independent. See [the verification record](docs/data-sources.md) for measured differences and limitations.
 
 The Wind baseline comes from a published **−1.07%** cumulative return on 2004-12-31 relative to an inception value of 1000: 1000 × (1 − 0.0107) ≈ 989.30. The published return was rounded, so the resulting Wind cumulative returns and return difference are approximate. The baseline is held fixed on every refresh.
 
-The Wind feed is a **public redistribution**, not a direct authenticated Wind feed. Daily updates use this mirror and validation checks; they do not independently verify each new observation through a Wind terminal. The mirror's top-level metadata may describe fallbacks for other series. The updater selects the exact 885003.WI series and checks known historical values rather than substituting a different index. A mirror can become stale, change format, or stop responding; an authorized Wind source can replace it later without changing the chart formulas.
+The Wind feeds are **public redistributions**, not direct authenticated Wind feeds. The updater selects the exact 885003.WI series and checks identity, dates and historical values. Both production adapters use raw closes; they do not reconstruct levels from normalized charts. Public mirrors have no verified availability guarantee and can be delayed or change format. An authorized Wind connection is a separate formal data-service option; none is assumed here.
+
+### Failover rules
+
+1. Validate each provider's exact index, positive finite closes, dates and source cutoff. Primary feeds must agree with all already published history within the recorded precision.
+2. For a backup, verify the most recent **continuous tail of expected overlapping dates**, up to 60 and at least 20 observations. An older missing date ends that window; a mismatch inside it rejects the source. The permitted difference for the current raw-close providers is **0.01 index point**, plus a tiny floating-point epsilon.
+3. Keep all previously published levels unchanged. Only append later observations; never re-import an alternate provider's older history. Record the provider for each appended historical segment.
+4. Try the valid provider combinations and choose the one with the newest **shared** cutoff, preferring primaries on a tie. New dates through that cutoff must align exactly; do not skip a missing date and permanently lose it.
+5. A backup older than the already observed source cutoff cannot replace it. If valid providers cannot advance or reproduce the shared data, retain the last verified snapshot and expose the failure instead of pretending it is fresh.
+
+The source details disclose all attempted providers, their dates and validation status. On **2026-11-20**, the CSI backup ended on **2026-11-18** and the Wind backup on **2026-11-13**, while both primaries reached **2026-11-19**. Consequently neither backup moved the page backward. The Wind backup contains older missing/misaligned dates, which is why it is used only for a verified new tail.
 
 Only dates available in both source histories are plotted, plus the reconstructed baseline row. There is no forward-filling or invented trading-day data. Straight segments connect observed points. The included snapshot ends on **2026-11-19**.
 
@@ -70,6 +93,7 @@ Fetch fresh source data and run validation tests:
 ~~~bash
 python3 scripts/update_data.py --output site/data.json
 python3 -m unittest discover -s tests -v
+node --test tests/test_crossings.js
 ~~~
 
 For offline reproduction, pass both raw source JSON files:
@@ -80,12 +104,15 @@ python3 scripts/update_data.py --stock-file /path/to/H00300_raw.json --wind-file
 
 Use --previous /path/to/previous-data.json to validate against an earlier publication. The workflow obtains the last published dataset for this check. A first deployment returning HTTP 404 uses the included snapshot; other unexpected responses and network errors stop the run.
 
+By default, the local updater returns an error if no valid live provider pair exists. The workflow explicitly uses **--allow-cached** so a valid previous dataset can be served with a visible degraded-source status. It does not hide that status or rewrite the original data-generation time. The implementation retains the common history, not unused individual-source observations beyond its shared cutoff; complementary outages can therefore delay catch-up.
+
 | Path | Purpose |
 | --- | --- |
-| site/index.html, site/styles.css, site/app.js | The three charts, source links, and page refresh |
+| site/index.html, site/styles.css, site/app.js | Three charts, crossover table, source links and source health |
 | site/data.json | Index levels, cumulative returns, and source metadata |
-| scripts/update_data.py | Source retrieval, date alignment, and validation |
-| tests/test_update_data.py | Data integrity and calculation checks |
+| scripts/update_data.py | Provider selection, retained history, alignment and validation |
+| scripts/backup_sources.py, scripts/wind_backup.py | Exact-index public backup adapters |
+| tests/ | Source parsing, outage behavior, data integrity and crossover checks |
 | .github/workflows/update-and-deploy.yml | Daily refresh and Pages deployment |
 
 The workflow uses GitHub's automatically supplied token with restricted permissions and does not commit generated data to the source repository. The live dataset is available at data.json under the published site's URL.

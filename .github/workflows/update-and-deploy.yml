@@ -31,8 +31,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Run data validation tests
-        run: python -m unittest discover -s tests -v
+      - name: Run data and crossing validation tests
+        run: |
+          python -m unittest discover -s tests -v
+          node --test tests/test_crossings.js
 
       - name: Configure Pages
         id: pages
@@ -71,7 +73,7 @@ jobs:
           PY
 
       - name: Fetch and validate both index histories
-        run: python scripts/update_data.py --output site/data.json --previous "$RUNNER_TEMP/previous-data.json"
+        run: python scripts/update_data.py --output site/data.json --previous "$RUNNER_TEMP/previous-data.json" --allow-cached
 
       - name: Write run summary
         run: |
@@ -85,6 +87,14 @@ jobs:
               summary.write('Latest common data date: **' + data['as_of'] + '**\n\n')
               summary.write('Aligned observations: **' + str(len(data['data'])) + '**\n\n')
               summary.write('Data fetched at: ' + data['generated_at'] + '\n')
+              status = data.get('update_status', {})
+              summary.write('\nSource check: **' + status.get('outcome', 'unknown') + '** — ' + status.get('message', '') + '\n\n')
+              for code, source in data['sources'].items():
+                  summary.write('- ' + code + ': ' + source.get('mode', 'primary') + ', through ' + source['as_of'] + '\n')
+                  for check in source.get('checks', []):
+                      summary.write('  - ' + check['name'] + ': ' + check['status'] + ', ' + check.get('as_of', 'unavailable') + '\n')
+          if data.get('update_status', {}).get('outcome') == 'cached':
+              print('::warning::One or more source checks failed; the page retains its last verified data and shows a cached-data notice.')
           PY
 
       - name: Upload static site
