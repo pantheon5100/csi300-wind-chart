@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ffffff">
-  <meta name="description" content="沪深300全收益指数与万得偏债混合型基金指数：累计收益率、原始指数点位和累计收益差。每日更新数据。">
+  <meta name="description" content="沪深300全收益指数与万得偏债混合型基金指数：累计收益率、原始指数点位和原始点位差。每日更新数据。">
   <title>沪深300全收益与万得偏债混合</title>
-  <link rel="stylesheet" href="./styles.css?v=20261120-no-table">
-  <script src="./app.js?v=20261120-no-table" defer></script>
+  <link rel="stylesheet" href="./styles.css?v=20261120-level-gap">
+  <script src="./app.js?v=20261120-level-gap" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#charts">跳到图表</a>
@@ -52,8 +52,9 @@
         </div>
       </section>
       <section aria-labelledby="gap-heading">
-        <h2 id="gap-heading">3. 累计收益差（偏离）</h2>
-        <p class="chart-summary gap-summary"><span>沪深300累计收益率 − 万得偏债混合累计收益率</span><strong id="gap-total" class="gap">—</strong></p>
+        <h2 id="gap-heading">3. 原始指数点位差（偏离）</h2>
+        <p class="chart-summary gap-summary"><span>沪深300全收益点位 − 万得偏债混合点位</span><strong id="gap-total" class="gap">—</strong></p>
+        <p class="note">直接相减，保留正负号；零线表示两指数点位相同。点位差不等于收益差或估值偏离。</p>
         <div class="plot-wrap" id="gap-wrap">
           <svg id="gap-chart" class="chart" role="img" tabindex="0" aria-labelledby="gap-title gap-description" aria-describedby="interaction-help"></svg>
           <div id="gap-tooltip" class="tooltip" hidden aria-hidden="true"></div>
@@ -62,9 +63,9 @@
     </div>
 
     <footer>
-      <p>累计收益率 =（当日指数 ÷ 2004-12-31 基准日指数 − 1）× 100%。收益差的单位是百分点，零线表示两者累计收益相同。</p>
-      <p>原始点位直接采用指数数值；两项指数原有基点不同，点位高低不等同于累计收益高低。</p>
-      <p>万得基准日点位约为 <span id="wind-baseline">989.30</span>，由公开累计收益换算，存在四舍五入误差，因此万得累计收益及两者收益差均为近似值。</p>
+      <p>累计收益率 =（当日指数 ÷ 2004-12-31 基准日指数 − 1）× 100%。点位差 = 沪深300全收益点位 − 万得偏债混合点位，单位为指数点。</p>
+      <p>原始点位是来源发布的指数数值，不是人民币金额；不同指数的点位尺度不能直接代表收益高低。</p>
+      <p>万得基准日点位约为 <span id="wind-baseline">989.30</span>，由公开累计收益换算，存在四舍五入误差。万得累计收益及基准日点位差为近似值；其他日期的点位差直接使用来源收盘点位计算。</p>
       <p id="source-precision-note" hidden></p>
       <p>仅使用双方共同日期的记录，直线连接，不补点。<span id="point-count"></span> <a href="./data.json" download="csi300-wind-data.json">下载数据</a></p>
       <p class="times">数据生成 <span id="generated-at">—</span> · 本页最近检查 <span id="last-check">—</span> · 本页载入／更新 <span id="last-update">—</span>（均为北京时间）</p>

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { calculateCrossings } = require('../site/app.js');
 
-const points = pairs => pairs.map(([date, difference]) => [date, 1000, 989.3, difference, 0]);
+const points = pairs => pairs.map(([date, difference]) => [date, 1000 + difference, 1000, difference / 10, 0]);
 
 test('initial equality and first departure do not count as crossings', () => {
   const result = calculateCrossings(points([
@@ -58,9 +58,29 @@ test('floating point zero noise does not create a spurious sign reversal', () =>
   assert.equal(result.events.length, 0);
 });
 
-test('rejects ambiguous dates, unordered dates, and nonfinite returns', () => {
+test('raw index crossings differ from cumulative-return crossings when the bases differ', () => {
+  const data = [
+    ['2004-12-31', 1000.00, 989.30, 0, 0],
+    ['2005-01-04', 982.79, 984.85, -1.721, -0.449813],
+    ['2005-01-05', 992.56, 985.90, -0.744, -0.343677],
+  ];
+  // Raw levels start unequal and reverse twice. The normalized-return gap
+  // starts at zero and remains negative thereafter, so it never reverses.
+  assert.deepEqual(data.map(row => Math.sign(row[3] - row[4])), [0, -1, -1]);
+  const result = calculateCrossings(data);
+  assert.deepEqual(result.events.map(event => [event.date, event.direction]), [
+    ['2005-01-04', 'wind_above'],
+    ['2005-01-05', 'stock_above'],
+  ]);
+  assert.ok(Math.abs(result.events[0].difference - (-2.06)) < 1e-9);
+  assert.ok(Math.abs(result.events[1].difference - 6.66) < 1e-9);
+  assert.equal(result.events[0].previousSideDate, '2004-12-31');
+});
+
+test('rejects ambiguous dates, unordered dates, and nonfinite index levels', () => {
   assert.throws(() => calculateCrossings(points([['2024-02-30', -1]])), TypeError);
   assert.throws(() => calculateCrossings(points([['2024-01-02', -1], ['2024-01-01', 2]])), TypeError);
   assert.throws(() => calculateCrossings(points([['2024-01-01', NaN]])), TypeError);
   assert.throws(() => calculateCrossings(points([['2024-01-01', Infinity]])), TypeError);
+  assert.throws(() => calculateCrossings([['2024-01-01', 1000, Infinity, 0, 0]]), TypeError);
 });

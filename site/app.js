@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  // A crossing is confirmed at the first observed close on the opposite side.
+  // A raw-level crossing is confirmed at the first close on the opposite side.
   // Zero touches and zero plateaus do not count until the nonzero sign reverses.
   function calculateCrossings(data, epsilon = 1e-9) {
     if (!Array.isArray(data) || !Number.isFinite(epsilon) || epsilon < 0) throw new TypeError('Invalid crossing input');
@@ -11,9 +11,9 @@
     let previousSideIndex = -1;
     for (let index = 0; index < data.length; index += 1) {
       const row = data[index];
-      if (!Array.isArray(row) || !Number.isFinite(dayValue(row[0])) || row[0] <= previousDate || !Number.isFinite(row[3]) || !Number.isFinite(row[4])) throw new TypeError('Crossings require ordered dates and finite cumulative returns');
+      if (!Array.isArray(row) || !Number.isFinite(dayValue(row[0])) || row[0] <= previousDate || !Number.isFinite(row[1]) || !Number.isFinite(row[2])) throw new TypeError('Crossings require ordered dates and finite index levels');
       previousDate = row[0];
-      const difference = row[3] - row[4];
+      const difference = row[1] - row[2];
       const sign = difference > epsilon ? 1 : difference < -epsilon ? -1 : 0;
       if (sign === 0) continue;
       if (previousSign && sign !== previousSign) {
@@ -77,9 +77,12 @@
   function signed(value) { return `${value > 0 ? '+' : ''}${Math.abs(value) < 0.05 ? '0.0' : value.toFixed(1)}`; }
   function percentage(value, approximate = false) { return `${approximate ? '约 ' : ''}${signed(value)}%`; }
   function level(value, approximate = false) { return `${approximate ? '约 ' : ''}${levelFormat.format(value)} 点`; }
-  function gap(value) { return `约 ${signed(value)} 个百分点`; }
+  function gap(value, approximate = false) {
+    const rounded = Math.abs(value) < 0.005 ? 0 : value;
+    return `${approximate ? '约 ' : ''}${rounded > 0 ? '+' : ''}${levelFormat.format(rounded)} 点`;
+  }
   function setText(id, value) { $(id).textContent = value; }
-  function crossingDirection(event) { return event.direction === 'stock_above' ? '沪深300转为领先' : '万得转为领先'; }
+  function crossingDirection(event) { return event.direction === 'stock_above' ? '沪深300点位转为较高' : '万得点位转为较高'; }
 
   const charts = [
     {
@@ -97,8 +100,8 @@
       ],
     },
     {
-      key: 'gap', title: '累计收益差（偏离）', unit: '累计收益差（百分点）', tick: value => axisFormat.format(value),
-      series: [{ key: 'gap', name: '沪深300 − 万得', value: row => row[3] - row[4], format: row => gap(row[3] - row[4]) }],
+      key: 'gap', title: '原始指数点位差（偏离）', unit: '指数点位差（点）', tick: value => axisFormat.format(value),
+      series: [{ key: 'gap', name: '沪深300点位 − 万得点位', value: row => row[1] - row[2], format: row => gap(row[1] - row[2], row[0] === FIXED_START) }],
     },
   ].map(chart => ({ ...chart, svg: $(`${chart.key}-chart`), wrap: $(`${chart.key}-wrap`), tooltip: $(`${chart.key}-tooltip`), selectedIndex: 0, pinned: false, geometry: null }));
 
@@ -204,7 +207,7 @@
     setText('return-wind', percentage(latest[4], true));
     setText('level-stock', level(latest[1]));
     setText('level-wind', level(latest[2]));
-    setText('gap-total', gap(latest[3] - latest[4]));
+    setText('gap-total', gap(latest[1] - latest[2]));
     setText('wind-baseline', payload.baseline['885003.WI'].toFixed(2));
     setText('generated-at', clockFormat.format(new Date(payload.generated_at)));
     setText('point-count', `共 ${rows.length.toLocaleString('zh-CN')} 个日期。`);

@@ -10,22 +10,25 @@ Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 | --- | --- |
 | Raw index levels | Each source's published index level in points. |
 | Cumulative returns | (index level / index level on 2004-12-31 − 1) × 100, in percent. |
-| Return difference | H00300 cumulative return − 885003.WI cumulative return, in **percentage points**. |
+| Index-level difference (deviation) | H00300 raw index level − 885003.WI raw index level, in **index points**. |
 
-The cumulative-return baseline is fixed at **2004-12-31 = 0%**. H00300 uses **1000.00** points; Wind uses **approximately 989.30** points. A positive return difference means H00300 has the larger cumulative return from that date; a negative value means the Wind index does.
+The cumulative-return baseline is fixed at **2004-12-31 = 0%**. H00300 uses **1000.00** points; Wind uses **approximately 989.30** points. This normalization applies to the cumulative-return chart.
 
-**Raw index levels have different original bases.** Their absolute point values are not directly comparable as investment gains. Use the cumulative-return chart or return-difference chart to compare performance from the common starting date. The reconstructed Wind baseline is approximate in all charts.
+The deviation chart uses the same raw values shown in the raw-index-level chart and keeps the sign of their difference. A positive value means the H00300 level is higher; a negative value means the Wind level is higher; zero means the two published index levels are numerically equal. For example, on **2026-11-19**, the deviation is **6001.04 − 4976.58 = +1024.46 points**.
+
+**Raw index levels use each provider's original scale.** They are index points, not currency amounts. Equal point levels do not imply equal investment gains, and the larger raw level does not establish better cumulative performance. Use the cumulative-return chart to compare performance from the common starting date. The deviation at the reconstructed first row, 2004-12-31, is approximately **1000.00 − 989.30 = +10.70 points**; it is not reset to zero.
 
 ## Crossovers and intervals
 
-The deviation chart marks a crossover on the **first observed daily close on the opposite side of zero**. Hover over a marked observation to see its date, which index takes the lead, calendar days since the previous crossover, elapsed common-data observations, and the actual deviation at confirmation. The chart's keyboard controls can also inspect these observations.
+The deviation chart marks a raw-level crossover on the **first observed daily close on the opposite side of zero**. Hover over a marked observation to see its date, which index now has the higher raw level, calendar days since the previous crossover, elapsed common-data observations, and the actual point difference at confirmation. The chart's keyboard controls can also inspect these observations.
 
-- The shared initial 0% point is not a crossover. A touch of zero followed by a return to the same side is not counted. A zero plateau counts once, when the next nonzero close confirms a reversal.
+- The first raw-level difference establishes the initial side. Because the initial difference is positive, its reversal to **−2.06 points on 2005-01-04** is counted. An initial equality itself is not a crossover.
+- A touch of zero followed by a return to the same side is not counted. A zero plateau counts once, when the next nonzero close confirms a reversal.
 - Daily closes locate the confirmation date; they do not establish an exact intraday crossing time. A marker therefore sits on the actual close, not an invented zero observation.
 - Calendar days are ordinary date differences. Common-data intervals count observations after the previous event through the current event. The first event has no previous interval.
-- Crossovers depend on the **2004-12-31** starting date and the stated baselines. They establish equal cumulative returns from that start, not fair value, equilibrium, or a validated buy/sell rule.
+- These markers track the ordering of the two original index levels. Their locations depend on the indices' original bases; they do not indicate equal cumulative returns, fair value, equilibrium, or a validated buy/sell rule.
 
-On the dataset through **2026-11-19**, there are **33** crossings, most recently **2014-07-24**. Markers and hover intervals are calculated from the downloaded data on every page load, so future crossings appear automatically.
+On the dataset through **2026-11-19**, there are **26** raw-level crossings, most recently **2014-07-24**. That crossing occurred **94 calendar days / 65 common-data observations** after the previous one on **2014-04-21**. Markers and hover intervals are calculated from the downloaded data on every page load, so future crossings appear automatically.
 
 ## Daily refresh
 
@@ -52,7 +55,7 @@ GitHub schedules may be delayed or skipped under load. **Scheduled workflows in 
 
 The updater fills the CSI URL's endDate with the retrieval date. Mirror homepages: <https://ashare.laoqianriritan.com/> and <https://funddb.cn/>. The backup providers use different hosts from the primary providers; this reduces host-level dependence but does not prove their entire upstream data chains are independent. See [the verification record](docs/data-sources.md) for measured differences and limitations.
 
-The Wind baseline comes from a published **−1.07%** cumulative return on 2004-12-31 relative to an inception value of 1000: 1000 × (1 − 0.0107) ≈ 989.30. The published return was rounded, so the resulting Wind cumulative returns and return difference are approximate. The baseline is held fixed on every refresh.
+The Wind baseline comes from a published **−1.07%** cumulative return on 2004-12-31 relative to an inception value of 1000: 1000 × (1 − 0.0107) ≈ 989.30. The published return was rounded, so the normalized Wind cumulative returns are approximate. The raw point-difference chart subtracts the published closes directly; only its reconstructed 2004-12-31 row uses this approximate baseline. The baseline is held fixed on every refresh.
 
 The Wind feeds are **public redistributions**, not direct authenticated Wind feeds. The updater selects the exact 885003.WI series and checks identity, dates and historical values. Both production adapters use raw closes; they do not reconstruct levels from normalized charts. Public mirrors have no verified availability guarantee and can be delayed or change format. An authorized Wind connection is a separate formal data-service option; none is assumed here.
 
