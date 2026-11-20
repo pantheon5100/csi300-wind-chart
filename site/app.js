@@ -57,6 +57,7 @@
   const FIXED_START = '2004-12-31';
   const EXPECTED_COLUMNS = ['date', 'stock_level', 'wind_level', 'stock_return_pct', 'wind_return_pct'];
   const COLORS = { stock: '#2674b8', wind: '#d5643f', gap: '#725c97' };
+  const { zoomRange, panRange, latestRange, reconcileRange, isOlderSnapshot, dataRequestUrl } = window.ChartControls;
   const $ = id => document.getElementById(id);
   const clockFormat = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -73,6 +74,9 @@
   let lastCheck = 0;
   let refreshTimer = 0;
   let resizeFrame = 0;
+  let viewRange = null;
+  let inspectionAnchorIndex = null;
+  let requestSequence = 0;
 
   function signed(value) { return `${value > 0 ? '+' : ''}${Math.abs(value) < 0.05 ? '0.0' : value.toFixed(1)}`; }
   function percentage(value, approximate = false) { return `${approximate ? '约 ' : ''}${signed(value)}%`; }
@@ -204,11 +208,6 @@
     const latestDifference = latest[1] - latest[2];
     setText('as-of', payload.as_of);
     setText('period', `${payload.start_date} — ${payload.as_of} · 共同日期的日度数据 · 累计收益起点 0%`);
-    setText('return-stock', percentage(latest[3]));
-    setText('return-wind', percentage(latest[4], true));
-    setText('level-stock', level(latest[1]));
-    setText('level-wind', level(latest[2]));
-    setText('gap-total', gap(latestDifference));
     setText('current-deviation-value', gap(latestDifference));
     setText('current-deviation-direction', Math.abs(latestDifference) < 0.005 ? '两指数点位相同' : latestDifference > 0 ? '沪深300全收益点位较高' : '万得偏债混合点位较高');
     setText('current-deviation-date', payload.as_of);
@@ -236,43 +235,55 @@
       // A hidden page waits until it becomes visible; no background polling.
     }, delay);
   }
-  async function refreshData() {
+  async function refreshData({ manual = false } = {}) {
     if (pending) return;
     pending = true;
     $('refresh-button').disabled = true;
-    setText('refresh-button', '正在检查');
-    status(payload ? '正在检查数据，当前曲线保留。' : '正在读取数据…');
+    setText('refresh-button', '正在刷新…');
+    status(payload ? '正在刷新已发布数据，当前曲线保留。' : '正在读取数据…');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     try {
-      const response = await fetch('./data.json', { cache: 'no-store', signal: controller.signal });
+      const url = dataRequestUrl(document.baseURI, `${Date.now()}-${++requestSequence}`);
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error(`数据请求失败（HTTP ${response.status}）`);
       const candidate = validateData(await response.json());
+      if (isOlderSnapshot(candidate, payload)) throw new Error(`收到较旧数据（${candidate.as_of}），未覆盖当前曲线`);
       const nextFingerprint = JSON.stringify(candidate.data);
       const changed = nextFingerprint !== fingerprint;
       const oldAsOf = payload?.as_of;
+      const oldTotal = rows.length;
       const selectedDates = charts.map(chart => rows[chart.selectedIndex]?.[0]);
+      const nextRange = oldTotal && viewRange ? reconcileRange(viewRange, oldTotal, candidate.data.length) : { start: 0, end: candidate.data.length - 1 };
+      const nextStamps = candidate.data.map(row => dayValue(row[0]));
+      const nextCrossings = calculateCrossings(candidate.data);
       payload = candidate;
       rows = candidate.data;
-      stamps = rows.map(row => dayValue(row[0]));
-      crossingInfo = calculateCrossings(rows);
+      viewRange = nextRange;
+      if (manual) {
+        viewRange = latestRange(viewRange, rows.length);
+        inspectionAnchorIndex = null;
+        charts.forEach(chart => { chart.pinned = false; });
+      }
+      stamps = nextStamps;
+      crossingInfo = nextCrossings;
       fingerprint = nextFingerprint;
       renderMetadata();
-      if (changed) {
+      renderViewControls();
+      if (changed || manual) {
         $('loading').hidden = true;
         $('charts').hidden = false;
         charts.forEach((chart, index) => {
-          chart.selectedIndex = chart.pinned && selectedDates[index] ? nearestIndex(dayValue(selectedDates[index])) : rows.length - 1;
+          chart.selectedIndex = chart.pinned && selectedDates[index] ? nearestIndex(dayValue(selectedDates[index])) : viewRange.end;
+          chart.selectedIndex = Math.max(viewRange.start, Math.min(viewRange.end, chart.selectedIndex));
           drawChart(chart);
         });
-        setText('last-update', clockFormat.format(new Date()));
-        status(oldAsOf ? (oldAsOf === payload.as_of ? '数据已更新，截止日期未变。' : `已更新至 ${payload.as_of}。`) : '数据已载入。');
-      } else {
-        status('检查完成，已发布数据没有变化。');
+        if (changed) setText('last-update', clockFormat.format(new Date()));
       }
+      status(!oldAsOf ? `已载入，数据截至 ${payload.as_of}。` : changed ? `已刷新，数据截至 ${payload.as_of}。` : `已刷新，数据截至 ${payload.as_of}；暂无更晚的已发布记录。`);
     } catch (error) {
       const message = error.name === 'AbortError' ? '请求超时' : error instanceof SyntaxError ? '数据文件暂时无法读取' : error.message;
-      status(payload ? `检查失败：${message}。保留截至 ${payload.as_of} 的曲线，可手动重试。` : `载入失败：${message}。请点击“检查更新”重试。`, true);
+      status(payload ? `刷新未完成：${message}。保留截至 ${payload.as_of} 的曲线，可手动重试。` : `载入失败：${message}。请点击“刷新最新数据”重试。`, true);
       if (!payload) setText('loading', '暂时无法载入数据。');
     } finally {
       clearTimeout(timeout);
@@ -280,9 +291,45 @@
       setText('last-check', clockFormat.format(new Date(lastCheck)));
       pending = false;
       $('refresh-button').disabled = false;
-      setText('refresh-button', '检查更新');
+      setText('refresh-button', '刷新最新数据');
       updateStaleness();
       scheduleNextCheck();
+    }
+  }
+
+  function renderViewControls() {
+    if (!viewRange || !rows.length) return;
+    const count = viewRange.end - viewRange.start + 1;
+    const ending = rows[viewRange.end];
+    for (const chart of charts) {
+      setText(`${chart.key}-end-date`, ending[0]);
+      $(`${chart.key}-end-date`).dateTime = ending[0];
+    }
+    setText('return-stock', percentage(ending[3]));
+    setText('return-wind', percentage(ending[4], true));
+    setText('level-stock', level(ending[1]));
+    setText('level-wind', level(ending[2]));
+    setText('gap-total', gap(ending[1] - ending[2]));
+    setText('view-range', `显示 ${rows[viewRange.start][0]} — ${rows[viewRange.end][0]} · ${count.toLocaleString('zh-CN')} 个共同日期`);
+    $('zoom-in').disabled = count <= Math.min(5, rows.length);
+    $('zoom-out').disabled = count >= rows.length;
+    $('zoom-reset').disabled = count >= rows.length;
+    $('pan-earlier').disabled = viewRange.start === 0;
+    $('pan-later').disabled = viewRange.end === rows.length - 1;
+  }
+  function changeView(nextRange, showLatest = false) {
+    if (!rows.length) return;
+    viewRange = nextRange;
+    for (const chart of charts) {
+      chart.selectedIndex = showLatest ? rows.length - 1 : Math.max(viewRange.start, Math.min(viewRange.end, chart.selectedIndex));
+      chart.pinned = showLatest;
+    }
+    if (showLatest) inspectionAnchorIndex = rows.length - 1;
+    renderViewControls();
+    charts.forEach(drawChart);
+    if (showLatest) {
+      const latest = rows.at(-1);
+      setText('chart-announcement', `已定位最新数据 ${latest[0]}。沪深300全收益 ${level(latest[1])}，万得偏债混合 ${level(latest[2])}，偏离 ${gap(latest[1] - latest[2])}。`);
     }
   }
 
@@ -313,15 +360,18 @@
     const width = Math.max(240, chart.wrap.clientWidth);
     const compact = width < 520;
     const height = compact ? 265 : 310;
-    const frame = { left: compact ? 48 : 58, right: width - 12, top: 25, bottom: height - 30 };
-    let min = 0, max = 0;
-    for (const row of rows) {
+    const frame = { left: compact ? 48 : 58, right: width - 12, top: 25, bottom: height - 35 };
+    const visibleRows = rows.slice(viewRange.start, viewRange.end + 1);
+    const allHistory = visibleRows.length === rows.length;
+    let min = allHistory ? 0 : Infinity, max = allHistory ? 0 : -Infinity;
+    for (const row of visibleRows) {
       for (const series of chart.series) { const value = series.value(row); min = Math.min(min, value); max = Math.max(max, value); }
     }
+    if (min === max) { const padding = Math.max(Math.abs(min) * 0.01, 1); min -= padding; max += padding; }
     const step = tickStep(max - min);
     const yMin = Math.floor(min / step) * step;
-    const yMax = Math.ceil(max / step) * step || step;
-    const t0 = stamps[0], t1 = stamps.at(-1);
+    const yMax = Math.ceil(max / step) * step;
+    const t0 = stamps[viewRange.start], t1 = stamps[viewRange.end];
     const x = stamp => frame.left + (stamp - t0) / (t1 - t0) * (frame.right - frame.left);
     const y = value => frame.bottom - (value - yMin) / (yMax - yMin) * (frame.bottom - frame.top);
     chart.geometry = { width, height, frame, x, y, t0, t1 };
@@ -330,7 +380,7 @@
     chart.svg.setAttribute('width', String(width));
     chart.svg.setAttribute('height', String(height));
     append(chart.svg, 'title', { id: `${chart.key}-title` }, chart.title);
-    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `${payload.start_date}至${payload.as_of}，${rows.length}个共同日期。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。使用真实记录之间的直线连接。${chart.key === 'gap' ? `圆点标记 ${crossingInfo.events.length} 次交叉确认日，可在图中查看日期与间隔。` : ''}`);
+    append(chart.svg, 'desc', { id: `${chart.key}-description` }, `显示${visibleRows[0][0]}至${visibleRows.at(-1)[0]}，${visibleRows.length}个共同日期。完整数据截至${payload.as_of}。最新：${chart.series.map(series => `${series.name}${series.format(rows.at(-1))}`).join('，')}。累计收益基准保持2004-12-31不变。使用真实记录之间的直线连接。${chart.key === 'gap' ? `完整历史有 ${crossingInfo.events.length} 次交叉确认日，可在图中查看日期与间隔。` : ''}`);
     append(chart.svg, 'text', { x: frame.left, y: 12 }, chart.unit);
     const grid = append(chart.svg, 'g', { 'aria-hidden': 'true' });
     for (let tick = yMin; tick <= yMax + step / 100; tick += step) {
@@ -339,26 +389,37 @@
       append(grid, 'text', { x: frame.left - 8, y: y(value) + 3.5, 'text-anchor': 'end' }, chart.tick(value));
     }
     append(grid, 'line', { x1: frame.left, x2: frame.right, y1: frame.bottom, y2: frame.bottom, class: 'axis-line' });
-    const firstYear = Number(rows[0][0].slice(0, 4));
-    const lastYear = Number(rows.at(-1)[0].slice(0, 4));
-    const yearStep = compact ? 5 : width < 800 ? 4 : 2;
-    for (let year = Math.ceil((firstYear + 1) / yearStep) * yearStep; year <= lastYear; year += yearStep) {
-      const px = x(Date.UTC(year, 0, 1));
-      if (px < frame.left + 15 || px > frame.right - 13) continue;
-      append(grid, 'text', { x: px, y: frame.bottom + 20, 'text-anchor': 'middle' }, String(year));
+    const tickCount = Math.max(1, Math.floor((frame.right - frame.left) / (compact ? 95 : 130)));
+    const yearsVisible = (t1 - t0) / (365.25 * 86400000);
+    const tickIndices = new Set();
+    const tickLabels = new Set();
+    for (let n = 1; n < tickCount; n += 1) {
+      const index = nearestIndex(t0 + (t1 - t0) * n / tickCount);
+      if (index <= viewRange.start || index >= viewRange.end || tickIndices.has(index)) continue;
+      const px = x(stamps[index]);
+      if (px < frame.left + 85 || px > frame.right - 85) continue;
+      tickIndices.add(index);
+      const date = rows[index][0];
+      const label = yearsVisible > 5 ? date.slice(0, 4) : yearsVisible > 1 ? date.slice(0, 7) : date.slice(5);
+      if (tickLabels.has(label)) continue;
+      tickLabels.add(label);
+      append(grid, 'text', { x: px, y: frame.bottom + 23, 'text-anchor': 'middle' }, label);
     }
+    append(grid, 'text', { x: frame.left, y: frame.bottom + 23, 'text-anchor': 'start', class: 'endpoint-date' }, visibleRows[0][0]);
+    append(grid, 'text', { x: frame.right, y: frame.bottom + 23, 'text-anchor': 'end', class: 'endpoint-date' }, visibleRows.at(-1)[0]);
     const defs = append(chart.svg, 'defs');
     const clip = append(defs, 'clipPath', { id: `${chart.key}-clip` });
     append(clip, 'rect', { x: frame.left - 2, y: frame.top - 2, width: frame.right - frame.left + 4, height: frame.bottom - frame.top + 4 });
     const paths = append(chart.svg, 'g', { 'clip-path': `url(#${chart.key}-clip)`, 'aria-hidden': 'true' });
     for (const series of chart.series) {
-      const path = rows.map((row, index) => `${index ? 'L' : 'M'}${x(stamps[index]).toFixed(2)},${y(series.value(row)).toFixed(2)}`).join('');
+      const path = visibleRows.map((row, index) => `${index ? 'L' : 'M'}${x(stamps[viewRange.start + index]).toFixed(2)},${y(series.value(row)).toFixed(2)}`).join('');
       append(paths, 'path', { d: path, class: `series-path ${series.key}-path`, stroke: COLORS[series.key] });
-      append(paths, 'circle', { cx: x(t1), cy: y(series.value(rows.at(-1))), r: 2.6, fill: COLORS[series.key] });
+      append(paths, 'circle', { cx: x(t1), cy: y(series.value(visibleRows.at(-1))), r: 2.6, fill: COLORS[series.key] });
     }
     if (chart.key === 'gap') {
       const markers = append(chart.svg, 'g', { class: 'crossing-markers', 'clip-path': `url(#${chart.key}-clip)`, 'aria-hidden': 'true' });
       for (const event of crossingInfo.events) {
+        if (event.index < viewRange.start || event.index > viewRange.end) continue;
         const marker = append(markers, 'circle', {
           cx: x(stamps[event.index]), cy: y(event.difference), r: 3.3,
           class: 'crossing-marker', fill: COLORS[event.direction === 'stock_above' ? 'stock' : 'wind'],
@@ -380,7 +441,7 @@
   }
   function showPoint(chart, index, pointerY, announce = false) {
     if (!rows.length || !chart.geometry) return;
-    chart.selectedIndex = Math.max(0, Math.min(rows.length - 1, index));
+    chart.selectedIndex = Math.max(viewRange.start, Math.min(viewRange.end, index));
     const row = rows[chart.selectedIndex];
     const { x, y, frame, width, height } = chart.geometry;
     const px = x(stamps[chart.selectedIndex]);
@@ -446,7 +507,7 @@
 
   for (const chart of charts) {
     chart.svg.addEventListener('pointermove', event => handlePointer(chart, event));
-    chart.svg.addEventListener('pointerdown', event => { chart.pinned = event.pointerType === 'touch'; handlePointer(chart, event); });
+    chart.svg.addEventListener('pointerdown', event => { chart.pinned = true; handlePointer(chart, event); inspectionAnchorIndex = chart.selectedIndex; });
     chart.svg.addEventListener('pointerleave', () => { if (!chart.pinned) hidePoint(chart); });
     chart.svg.addEventListener('focus', () => { chart.pinned = true; showPoint(chart, chart.selectedIndex, undefined, true); });
     chart.svg.addEventListener('blur', () => { chart.pinned = false; hidePoint(chart); });
@@ -455,19 +516,36 @@
       let index = chart.selectedIndex;
       if (event.key === 'ArrowLeft') index -= 1;
       else if (event.key === 'ArrowRight') index += 1;
-      else if (event.key === 'Home') index = 0;
-      else if (event.key === 'End') index = rows.length - 1;
+      else if (event.key === 'Home') index = viewRange.start;
+      else if (event.key === 'End') index = viewRange.end;
       else if (event.key === 'Escape') { chart.pinned = false; hidePoint(chart); return; }
       else return;
       event.preventDefault();
       chart.pinned = true;
       showPoint(chart, index, undefined, true);
+      inspectionAnchorIndex = chart.selectedIndex;
     });
   }
   document.addEventListener('pointerdown', event => {
     for (const chart of charts) if (!chart.wrap.contains(event.target)) { chart.pinned = false; hidePoint(chart); }
   });
-  $('refresh-button').addEventListener('click', refreshData);
+  $('refresh-button').addEventListener('click', () => refreshData({ manual: true }));
+  for (const [id, factor] of [['zoom-in', 0.5], ['zoom-out', 2]]) {
+    $(id).addEventListener('click', () => {
+      if (!viewRange) return;
+      const anchor = inspectionAnchorIndex !== null && inspectionAnchorIndex >= viewRange.start && inspectionAnchorIndex <= viewRange.end ? inspectionAnchorIndex : viewRange.end;
+      changeView(zoomRange(viewRange, rows.length, factor, anchor));
+    });
+  }
+  for (const [id, direction] of [['pan-earlier', -1], ['pan-later', 1]]) {
+    $(id).addEventListener('click', () => {
+      if (!viewRange) return;
+      inspectionAnchorIndex = null;
+      changeView(panRange(viewRange, rows.length, direction));
+    });
+  }
+  $('zoom-reset').addEventListener('click', () => { inspectionAnchorIndex = null; changeView({ start: 0, end: rows.length - 1 }); });
+  $('show-latest').addEventListener('click', () => { if (viewRange) changeView(latestRange(viewRange, rows.length), true); });
   const observer = new ResizeObserver(() => {
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => charts.forEach(drawChart));
@@ -479,5 +557,6 @@
     if (!pending && Date.now() - lastCheck >= CHECK_INTERVAL) refreshData();
     else scheduleNextCheck();
   });
+  window.addEventListener('pageshow', event => { if (event.persisted) refreshData(); });
   refreshData();
 })();

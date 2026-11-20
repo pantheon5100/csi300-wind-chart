@@ -6,6 +6,10 @@ Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 
 A prominent indicator at the top shows the latest signed index-point deviation, its common closing date, and which index has the higher numerical level. It updates with the published data and stays on the latest observation while older chart dates are inspected.
 
+The **刷新最新数据** button reloads the latest published dataset using a unique request URL and bypasses browser caching. Its status always reports the actual data date. A failed request or an older response preserves the newer chart already displayed. A restored browser-history page checks again. This button reads the published file; to collect new data from upstream providers immediately, use the footer's GitHub Actions link and choose **Run workflow** while signed in with repository write access.
+
+Shared **放大 / 缩小** controls adjust the visible date window for all three charts. Click a date before zooming to use it as the zoom anchor; otherwise zoom follows the right end. **← / →** move the window, **全部** restores the entire history, and **最新** moves to and selects the final record exactly. Each chart labels both endpoint dates explicitly. The minimum window contains five observations. Zooming changes the visible window and y-axis scale, while cumulative returns retain the original 2004-12-31 baseline and crossover intervals retain the full historical context.
+
 ## Three charts
 
 | Chart | Y-axis calculation |
@@ -35,7 +39,7 @@ On the dataset through **2026-11-19**, there are **26** raw-level crossings, mos
 ## Daily refresh
 
 - **Source data:** GitHub Actions checks both indices' primary and backup providers once daily at **09:00 Korea time / 08:00 Beijing time**. A push to the default branch or a manual workflow run also refreshes and deploys the site.
-- **Webpage:** loads the published dataset when opened, checks again every **24 hours** while open, and offers a manual check button. These browser checks read the site's data file; they do not trigger a source fetch or a GitHub workflow.
+- **Webpage:** loads the published dataset when opened, checks again every **24 hours** while open, and offers **刷新最新数据** for an immediate cache-bypassing read. These browser checks read the site's data file; they do not trigger a source fetch or a GitHub workflow. A manual refresh moves the visible window to the newest data while retaining its zoom level. Automatic checks follow the newest data if that was already in view, or preserve a historical window otherwise.
 - **Failure handling:** verified backup providers can append data when a primary is unavailable or slower. If no valid aligned pair is available, the workflow publishes the **last verified dataset** with a visible cached-data notice and a source-check timestamp. It never substitutes a different index or moves the data cutoff backward. An invalid previous snapshot still stops deployment. A failed browser check preserves the chart already displayed.
 - **Dates:** the latest common source date is shown on the page. Weekends and holidays do not create new observations. A notice appears when the data date is more than five calendar days old, which may also occur during long market holidays.
 
@@ -98,7 +102,7 @@ Fetch fresh source data and run validation tests:
 ~~~bash
 python3 scripts/update_data.py --output site/data.json
 python3 -m unittest discover -s tests -v
-node --test tests/test_crossings.js
+node --test tests/test_*.js
 ~~~
 
 For offline reproduction, pass both raw source JSON files:
@@ -113,7 +117,8 @@ By default, the local updater returns an error if no valid live provider pair ex
 
 | Path | Purpose |
 | --- | --- |
-| site/index.html, site/styles.css, site/app.js | Three charts, crossover markers and hover details, source links and source health |
+| site/index.html, site/styles.css, site/app.js | Three charts, synchronized zoom and navigation, manual refresh, crossover markers, source links and source health |
+| site/chart-controls.js | Date-window calculations, cache-bypassing request URLs and older-snapshot detection |
 | site/data.json | Index levels, cumulative returns, and source metadata |
 | scripts/update_data.py | Provider selection, retained history, alignment and validation |
 | scripts/backup_sources.py, scripts/wind_backup.py | Exact-index public backup adapters |

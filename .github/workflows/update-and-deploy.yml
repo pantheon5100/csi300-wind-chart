@@ -31,10 +31,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Run data and crossing validation tests
+      - name: Run data, crossing and chart-control tests
         run: |
           python -m unittest discover -s tests -v
-          node --test tests/test_crossings.js
+          node --test tests/test_*.js
 
       - name: Configure Pages
         id: pages
