@@ -11,6 +11,12 @@ keep the tests small; values, dates, series identity and source notes are retain
   public mirror, not a direct authenticated Wind feed. Its top-level source note
   concerns the mixed-index file and is retained verbatim.
 
+The November 24 review found that this global source note mentions an H20269
+fallback without establishing the Wind series' provenance. The unchanged
+archive is now a negative parser test. Tests that need a previously accepted
+snapshot explicitly replace only the in-memory source note with synthetic
+trusted metadata; this is a test setup, not authentication of the original feed.
+
 The Wind point for 2026-11-13 (4990.73) was independently checked against the
 public Jiucaishuo index details on the retrieval date. This historical check does
 not imply independent verification of every future daily update.

@@ -58,6 +58,29 @@ PROVIDERS = {
     ],
 }
 
+# A reviewed exception, not a wider historical comparison tolerance. The two
+# public feeds agreed on all 34 continuous observations from 2026-09-29 through
+# 2026-11-20 after these three corrections; official Wind confirmation was not
+# available. The primary's global provenance remains ambiguous and is checked
+# independently below. A live, normally validated provider must confirm the
+# corrected comparison copy before any of these changes can be published.
+REVIEWED_REVISIONS = ({
+    "id": "wind-885003-20261124",
+    "index_code": WIND_CODE,
+    "reviewed_at": "2026-11-24",
+    "reason": "2026-11-24 对照分别获取的两家公开数据源，确认这三个点位一致；最近连续34个已发布数据日也一致。未取得Wind官方直连确认，主源全局来源说明仍有歧义。仅修订列明日期，保留其他历史。",
+    "changes": [
+        {"date": "2026-11-18", "old": 4973.26, "new": 4968.32},
+        {"date": "2026-11-19", "old": 4976.58, "new": 4963.24},
+        {"date": "2026-11-20", "old": 4979.57, "new": 4940.44},
+    ],
+    "sources": [
+        {"name": "韭圈儿 / FundDB · 885003.WI 原始收盘历史", "url": PROVIDERS[WIND_CODE][1]["url"]},
+        {"name": "韭圈儿 / FundDB · 885003.WI 名称与最新收盘元数据", "url": "https://ai2.jiucaishuo.com/api/index-valuation/detail?code=885003.WI"},
+        {"name": "老钱日日谈公开镜像（仅用于此次点位交叉核对；全局来源说明有歧义）", "url": WIND_URL},
+    ],
+},)
+
 
 class DataValidationError(ValueError):
     """Source data cannot safely replace the published snapshot."""
@@ -176,6 +199,16 @@ def parse_wind(payload: Any, today: date) -> dict[str, float]:
     require(isinstance(series, dict), "Wind: exact series 885003.WI is absent; substitutes are not accepted")
     name = series.get("name", "")
     require(isinstance(name, str) and "偏债" in name and "混合" in name and "中证" not in name, "Wind: unexpected index name")
+    global_source = str(payload.get("source", ""))
+    if "H20269" in global_source.upper() and any(marker in global_source.lower() for marker in ("降级", "替代", "fallback", "substitut")):
+        # The global declaration covers several series. It is not proof that
+        # this particular series was substituted, but is insufficient evidence
+        # of its identity. A series-specific source must explicitly identify
+        # the Wind code rather than simply repeat the existing display name.
+        source = series.get("source")
+        explicit_wind = isinstance(source, str) and WIND_CODE in source.upper() and ("wind" in source.lower() or "万得" in source)
+        explicit_wind = explicit_wind and not any(marker in source.lower() for marker in ("h20269", "不可用", "降级", "替代", "unavailable", "fallback", "substitut"))
+        require(explicit_wind, "Wind: global source declares an H20269 fallback without explicit per-series 885003.WI provenance; the global note does not establish that this Wind-labelled series was substituted")
     days, levels = series.get("dates"), series.get("values")
     require(isinstance(days, list) and isinstance(levels, list) and len(days) == len(levels), "Wind: date/value lengths differ")
     points: dict[str, float] = {}
@@ -296,6 +329,9 @@ def assemble_dataset(stock: dict[str, float], wind: dict[str, float], *, now: da
     }
     if source_metadata is not None:
         dataset["sources"] = source_metadata
+    if previous is not None and "data_revisions" in previous:
+        require(isinstance(previous["data_revisions"], list), "Snapshot: invalid reviewed revision metadata")
+        dataset["data_revisions"] = copy.deepcopy(previous["data_revisions"])
     validate_snapshot(dataset)
     if previous is not None:
         check_previous(dataset, previous)
@@ -331,6 +367,51 @@ def update_from_payloads(output: Path, stock_payload: Any, wind_payload: Any, *,
 def previous_points(previous: dict[str, Any], code: str) -> dict[str, float]:
     column = 1 if code == STOCK_CODE else 2
     return {row[0]: row[column] for row in previous["data"] if code == STOCK_CODE or row[0] != BASE_DATE}
+
+
+def reviewed_previous(previous: Any, now: datetime) -> tuple[Any, bool]:
+    """Prepare exact approved corrections without changing the original.
+
+    This is only a comparison copy. update_live may publish it only with a live
+    Wind candidate that passes the usual source, overlap and pairing checks.
+    Missing dates are never inserted, and a third value is never overwritten.
+    """
+    if previous is None:
+        return None, False
+    revised = copy.deepcopy(previous)
+    revisions = revised.get("data_revisions", [])
+    require(isinstance(revisions, list), "Snapshot: invalid reviewed revision metadata")
+    rows = {row[0]: row for row in revised["data"]}
+    applied = False
+    for review in REVIEWED_REVISIONS:
+        if now.date().isoformat() < review["reviewed_at"]:
+            continue
+        changes = []
+        for change in review["changes"]:
+            row = rows.get(change["date"])
+            if row is None:
+                continue
+            # Exact approved decimal values: the ordinary 0.01 tolerance must
+            # never turn an unexpected old value into an approved correction.
+            require(row[2] in (change["old"], change["new"]), f"Reviewed revision {review['id']}: unexpected published value on {change['date']}; manual review required")
+            if row[2] == change["old"]:
+                changes.append(copy.deepcopy(change))
+        if not changes:
+            continue
+        require(not any(isinstance(entry, dict) and entry.get("id") == review["id"] for entry in revisions), f"Reviewed revision {review['id']}: an already recorded correction reverted")
+        for change in changes:
+            row = rows[change["date"]]
+            row[2] = change["new"]
+            row[4] = round((change["new"] / WIND_BASE - 1) * 100, 6)
+        entry = copy.deepcopy(review)
+        entry["changes"] = changes
+        entry["applied_at"] = now.isoformat(timespec="seconds").replace("+00:00", "Z")
+        revisions.append(entry)
+        applied = True
+    if applied:
+        revised["data_revisions"] = revisions
+        validate_snapshot(revised)
+    return (revised, True) if applied else (previous, False)
 
 
 def historical_tolerance(previous: dict[str, Any], code: str, day: str) -> float:
@@ -477,7 +558,7 @@ def prepare_pair(candidate_pair: tuple[Any, Any], previous: Any, all_checks: dic
                 points = dict(sorted(points.items()))
             source = {key: value for key, value in candidate.items() if key not in {"points", "code", "overlap_tolerance"}}
         source["checks"] = all_checks[code]
-        source["historical_source_note"] = "已发布历史保持不变；备用来源通过近期重叠数据校验后才追加新日期。"
+        source["historical_source_note"] = ("除已公开披露的审阅修订外，" if previous is not None and previous.get("data_revisions") else "") + "已发布历史保持不变；备用来源通过近期重叠数据校验后才追加新日期。"
         if code == WIND_CODE:
             source["note"] = "非Wind官方直连；主源及备用均读取原始指数收盘点位。"
         merged[code], sources[code] = points, source
@@ -503,16 +584,21 @@ def update_live(output: Path, *, previous_path: Path | None = None, generated_at
         validate_snapshot(previous)
         for code in (STOCK_CODE, WIND_CODE):
             validate_history(previous_points(previous, code), code, now.date())
+    corrected_previous, correction_pending = reviewed_previous(previous, now)
     options, all_checks = {}, {}
     for code in (STOCK_CODE, WIND_CODE):
-        candidates, checks = collect_candidates(code, previous, now)
+        comparison = corrected_previous if code == WIND_CODE else previous
+        candidates, checks = collect_candidates(code, comparison, now)
         all_checks[code] = checks
         options[code] = candidates + ([None] if allow_cached and previous is not None else [])
         require(bool(options[code]), f"{code}: no current verified provider; existing snapshot preserved")
     valid_pairs, errors = [], []
     for pair in product(options[STOCK_CODE], options[WIND_CODE]):
         try:
-            candidate_dataset = prepare_pair(pair, previous, all_checks, now)
+            # A cached Wind choice retains the ORIGINAL rows, even if some
+            # other live pairing validated the corrected comparison copy.
+            comparison = corrected_previous if pair[1] is not None else previous
+            candidate_dataset = prepare_pair(pair, comparison, all_checks, now)
             score = (candidate_dataset["as_of"], sum(item is not None for item in pair), sum(item is not None and item["mode"] == "primary" for item in pair))
             valid_pairs.append((score, pair, candidate_dataset))
         except DataValidationError as exc:
@@ -522,27 +608,32 @@ def update_live(output: Path, *, previous_path: Path | None = None, generated_at
     # A bad fresher backup must not block an otherwise valid primary pair.
     _, pair, dataset = max(valid_pairs, key=lambda item: item[0])
     selected = dict(zip((STOCK_CODE, WIND_CODE), pair))
+    correction_applied = correction_pending and selected[WIND_CODE] is not None
     warnings = []
     for code, candidate in selected.items():
         dataset["sources"][code]["history"] = source_history(previous, code, candidate, dataset["as_of"])
         if candidate is None:
             warnings.append(f"{code} 本次未取得可用的新数据，沿用已验证历史。")
         elif candidate["mode"] == "fallback":
-            warnings.append(f"{code} 本次使用经重叠校验的备用来源；既有历史保持不变。")
+            history_note = "除已披露的审阅修订外，既有历史保持不变。" if dataset.get("data_revisions") else "既有历史保持不变。"
+            warnings.append(f"{code} 本次使用经重叠校验的备用来源；" + history_note)
     cached = any(candidate is None for candidate in pair)
-    changed = previous is None or dataset["as_of"] > previous["as_of"]
+    changed = previous is None or dataset["as_of"] > previous["as_of"] or correction_applied
     outcome = "cached" if cached else "fresh" if changed else "unchanged"
     if cached and errors:
         warnings.append("本次两条序列未通过共同日期校验：" + errors[0])
-    if cached and previous is not None:
+    if cached and previous is not None and not correction_applied:
         dataset["generated_at"] = previous["generated_at"]
     names = []
     for code, label in [(STOCK_CODE, "沪深300"), (WIND_CODE, "万得")]:
         candidate = selected[code]
         names.append(label + "：" + ("缓存" if candidate is None else "备用" if candidate["mode"] == "fallback" else "主源"))
+    message = "来源检查完成。"
+    if cached:
+        message = "部分来源暂不可用或未通过校验，" + ("保留上次共同日期，并应用已披露的审阅修订。" if correction_applied else "保留上次已验证行情。")
     dataset["update_status"] = {
         "checked_at": now.isoformat(timespec="seconds").replace("+00:00", "Z"), "outcome": outcome,
-        "message": ("部分来源暂不可用或未通过校验，保留上次已验证行情。" if cached else "来源检查完成。") + "本次 " + "；".join(names) + "。", "warnings": warnings,
+        "message": message + "本次 " + "；".join(names) + "。", "warnings": warnings,
     }
     validate_snapshot(dataset)
     atomic_write_json(output, dataset)

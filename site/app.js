@@ -149,6 +149,16 @@
     $('stale-badge').hidden = days <= 5;
     setText('stale-badge', days > 5 ? `数据距今 ${days} 天` : '');
   }
+  function sourceCheckReason(check) {
+    const message = typeof check.message === 'string' ? check.message.trim() : '';
+    if (check.status === 'older') return Number.isFinite(dayValue(check.as_of)) ? `仅至 ${check.as_of}，日期较旧` : '数据日期较旧';
+    if (message.includes('global source declares an H20269 fallback')) return '全局说明提及 H20269 降级，但未明确这条万得序列的来源，暂不采用';
+    const mismatch = message.match(/source disagrees with verified history on (\d{4}-\d{2}-\d{2})/);
+    if (mismatch) return `与已发布点位不一致（${mismatch[1]}）`;
+    if (check.status === 'rejected') return message ? `未采用：${message.slice(0, 160)}` : '未通过数据校验';
+    if (check.status === 'failed') return '请求失败';
+    return message.slice(0, 160) || '尚未取得可用数据';
+  }
   function renderSourceHealth() {
     const update = payload.update_status;
     const sourceStatus = $('source-status');
@@ -156,8 +166,22 @@
     sourceStatus.hidden = !hasUpdate;
     sourceStatus.classList.toggle('source-cached', update?.outcome === 'cached');
     if (hasUpdate) {
-      const checkedAt = Number.isFinite(Date.parse(update.checked_at)) ? `（检查于 ${clockFormat.format(new Date(update.checked_at))}，北京时间）` : '';
-      sourceStatus.textContent = `${update.message}${checkedAt}`;
+      const details = [];
+      let message = update.message;
+      if (update.outcome === 'cached') {
+        message = `部分来源本次未取得可用数据，保留截至 ${payload.as_of} 的已发布行情。`;
+        for (const [code, name] of [['H00300', '沪深300'], ['885003.WI', '万得']]) {
+          const source = payload.sources[code];
+          if (source.mode !== 'cached' || !Array.isArray(source.checks)) continue;
+          for (const check of source.checks) {
+            if (check && check.status !== 'available') details.push(`${name}${check.role === 'fallback' ? '备用来源' : '主来源'}：${sourceCheckReason(check)}`);
+          }
+        }
+      } else if (payload.sources['885003.WI'].mode === 'fallback') {
+        details.push(`万得当前采用第三方备用来源：${payload.sources['885003.WI'].name}`);
+      }
+      const checkedAt = Number.isFinite(Date.parse(update.checked_at)) ? `服务器最近检查：${clockFormat.format(new Date(update.checked_at))}（北京时间）。` : '';
+      sourceStatus.textContent = `${message}${details.length ? ` ${details.join('；')}。` : ''}${checkedAt ? ` ${checkedAt}` : ''}`;
     } else sourceStatus.textContent = '';
 
     const options = $('source-options');
@@ -203,6 +227,54 @@
     $('source-precision-note').hidden = !notes.length;
     setText('source-precision-note', notes.join('；'));
   }
+  function renderDataRevisions() {
+    const details = $('data-revisions-details');
+    const content = $('data-revisions-content');
+    content.replaceChildren();
+    let count = 0;
+    for (const revision of Array.isArray(payload.data_revisions) ? payload.data_revisions : []) {
+      if (!revision || !['H00300', '885003.WI'].includes(revision.index_code)
+        || !Number.isFinite(dayValue(revision.reviewed_at)) || !Array.isArray(revision.changes)) continue;
+      const changes = revision.changes.filter(change => change && Number.isFinite(dayValue(change.date))
+        && change.date <= payload.as_of && Number.isFinite(change.old) && change.old > 0 && Number.isFinite(change.new) && change.new > 0);
+      if (!changes.length) continue;
+      count += changes.length;
+      const title = document.createElement('p');
+      title.textContent = `${revision.index_code} · 复核日期 ${revision.reviewed_at}`;
+      content.append(title);
+      if (typeof revision.reason === 'string' && revision.reason.trim()) {
+        const reason = document.createElement('p');
+        reason.textContent = revision.reason;
+        content.append(reason);
+      }
+      const list = document.createElement('ul');
+      for (const change of changes) {
+        const item = document.createElement('li');
+        item.textContent = `${change.date}：${levelFormat.format(change.old)} → ${levelFormat.format(change.new)} 点`;
+        list.append(item);
+      }
+      content.append(list);
+      const sources = document.createElement('p');
+      sources.append(document.createTextNode('复核来源：'));
+      let links = 0;
+      for (const source of Array.isArray(revision.sources) ? revision.sources : []) {
+        if (!source || typeof source.name !== 'string') continue;
+        let url;
+        try { url = new URL(source.url); } catch { continue; }
+        if (!['http:', 'https:'].includes(url.protocol)) continue;
+        if (links++) sources.append(document.createTextNode(' · '));
+        const link = document.createElement('a');
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = source.name;
+        sources.append(link);
+      }
+      if (links) content.append(sources);
+    }
+    details.hidden = count === 0;
+    setText('data-revisions-summary', `历史数据修订记录（${count} 条点位）`);
+  }
   function renderMetadata() {
     const latest = rows.at(-1);
     const latestDifference = latest[1] - latest[2];
@@ -225,6 +297,7 @@
       setText(`${key}-source-date`, `截至 ${source.as_of}${mode ? ` · ${mode}` : ''}`);
     }
     renderSourceHealth();
+    renderDataRevisions();
     updateStaleness();
   }
   function scheduleNextCheck() {

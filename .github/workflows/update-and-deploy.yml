@@ -86,15 +86,21 @@ jobs:
               summary.write('## Index chart update\n\n')
               summary.write('Latest common data date: **' + data['as_of'] + '**\n\n')
               summary.write('Aligned observations: **' + str(len(data['data'])) + '**\n\n')
-              summary.write('Data fetched at: ' + data['generated_at'] + '\n')
+              summary.write('Dataset generated at: ' + data['generated_at'] + '\n')
               status = data.get('update_status', {})
+              summary.write('\nLatest upstream check: ' + status.get('checked_at', 'unknown') + '\n')
               summary.write('\nSource check: **' + status.get('outcome', 'unknown') + '** — ' + status.get('message', '') + '\n\n')
               for code, source in data['sources'].items():
                   summary.write('- ' + code + ': ' + source.get('mode', 'primary') + ', through ' + source['as_of'] + '\n')
                   for check in source.get('checks', []):
-                      summary.write('  - ' + check['name'] + ': ' + check['status'] + ', ' + check.get('as_of', 'unavailable') + '\n')
+                      summary.write('  - ' + check['name'] + ': ' + check['status'] + ', ' + check.get('as_of', 'unavailable') + ' — ' + check.get('message', '') + '\n')
+              for revision in data.get('data_revisions', []):
+                  summary.write('\n### Reviewed historical correction: ' + revision['id'] + '\n\n')
+                  summary.write(revision['reason'] + '\n\n')
+                  for change in revision['changes']:
+                      summary.write('- ' + change['date'] + ': ' + str(change['old']) + ' → ' + str(change['new']) + '\n')
           if data.get('update_status', {}).get('outcome') == 'cached':
-              print('::warning::One or more source checks failed; the page retains its last verified data and shows a cached-data notice.')
+              print('::warning::One or more source checks failed; the page retains its last accepted data and shows a cached-data notice.')
           PY
 
       - name: Upload static site

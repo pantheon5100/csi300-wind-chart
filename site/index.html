@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="沪深300全收益指数与万得偏债混合型基金指数：累计收益率、原始指数点位和原始点位差。每日更新数据。">
   <title>沪深300全收益与万得偏债混合</title>
-  <link rel="stylesheet" href="./styles.css?v=20261120-refresh-zoom">
+  <link rel="stylesheet" href="./styles.css?v=20261124-source-status">
   <script src="./chart-controls.js?v=20261120-refresh-zoom" defer></script>
-  <script src="./app.js?v=20261120-refresh-zoom" defer></script>
+  <script src="./app.js?v=20261124-source-status" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#charts">跳到图表</a>
@@ -30,15 +30,20 @@
           <p class="deviation-date">最新共同收盘 · <time id="current-deviation-date"></time></p>
         </div>
       </div>
-      <p class="schedule">每日 08:00 北京时间（09:00 韩国时间）尝试更新一次；行情日期以上方标注为准。</p>
+      <p class="schedule">计划每日 08:00 北京时间（09:00 韩国时间）更新一次；GitHub 任务可能延迟，实际行情日期以上方标注为准。</p>
       <ul class="sources" aria-label="数据来源">
         <li><span class="stock">H00300</span>：<a id="stock-source" href="https://www.csindex.com.cn/" target="_blank" rel="noopener noreferrer">中证指数公司（官网）</a><span id="stock-source-date" class="source-date"></span></li>
-        <li><span class="wind">885003.WI</span>：<a id="wind-source" href="https://ashare.laoqianriritan.com/data/fund_index.json" target="_blank" rel="noopener noreferrer">老钱日日谈公开看板（第三方转引）</a><span id="wind-source-date" class="source-date"></span></li>
+        <li><span class="wind">885003.WI</span>：<a id="wind-source" href="https://ai2.jiucaishuo.com/api/index-valuation/history?code=885003.WI&amp;metric=close&amp;years2=10" target="_blank" rel="noopener noreferrer">韭圈儿 / FundDB（第三方公开数据）</a><span id="wind-source-date" class="source-date"></span></li>
       </ul>
+      <p class="note">万得数据来自第三方公开页面或接口，非 Wind 官方直连。</p>
       <p id="source-status" class="note" aria-live="polite" hidden></p>
       <details id="source-options-details" class="source-options" hidden>
         <summary>备用来源与本次检查</summary>
         <ul id="source-options"></ul>
+      </details>
+      <details id="data-revisions-details" class="source-options" hidden>
+        <summary id="data-revisions-summary">历史数据修订记录</summary>
+        <div id="data-revisions-content"></div>
       </details>
       <p id="update-status" class="status" role="status" aria-live="polite" aria-atomic="true">正在读取数据…</p>
     </header>

@@ -24,9 +24,17 @@ class FailoverTests(unittest.TestCase):
         folder = ROOT / "tests" / "fixtures"
         cls.stock = json.loads(gzip.decompress((folder / "stock.json.gz").read_bytes()))
         cls.wind = json.loads(gzip.decompress((folder / "wind.json.gz").read_bytes()))
+        # The archive stays unchanged. These failover tests use deliberately
+        # synthetic trusted provenance, not the real ambiguous global note.
+        cls.wind["source"] = "Synthetic trusted Wind 885003.WI metadata for unit tests only"
         cls.snapshot = updater.build_dataset(cls.stock, cls.wind, generated_at=NOW)
 
     def setUp(self):
+        # Reviewed historical corrections have their own integration tests;
+        # these cases retain their original no-history-change contract.
+        revisions = mock.patch.object(updater, "REVIEWED_REVISIONS", ())
+        revisions.start()
+        self.addCleanup(revisions.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.output = Path(self.directory.name) / "data.json"

@@ -1,6 +1,39 @@
-# Data-source verification — 2026-11-20
+# Data-source verification and reviewed corrections
 
 This record describes observed responses, not guaranteed future availability.
+
+## Reviewed correction on 2026-11-24
+
+The live site stopped at 2026-11-20 because its history-preservation check rejected changed Wind values. The November 23 deployment completed successfully in cached mode. A fresh November 24 check reproduced that rejection even though both configured Wind endpoints now contained November 23.
+
+The current public mirror and FundDB raw-close endpoint agree on these observations:
+
+| Date | Previously published | Current mirror | Current FundDB | Change |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-11-18 | 4973.26 | 4968.32 | 4968.32 | -4.94 |
+| 2026-11-19 | 4976.58 | 4963.24 | 4963.24 | -13.34 |
+| 2026-11-20 | 4979.57 | 4940.44 | 4940.44 | -39.13 |
+| 2026-11-23 | Not yet published | 4950.07 | 4950.07 | New observation |
+
+FundDB's detail and history responses both identify **885003.WI**, the **偏债混合型基金指数**, the **close** metric, update date **2026-11-23**, and latest raw close **4950.07**. The two public providers agree exactly across the **34 continuous published dates from 2026-09-29 through 2026-11-20**. Only the three rows above differ from the published snapshot. Their latest 60 common dates also agree, but that is not a gap-free 60-observation window: FundDB omits August 27, September 2, and September 28. Older FundDB data has substantial date-alignment differences and is not imported.
+
+The explicit reviewed revision changes only those three dates, recalculates their derived return fields, and preserves an audit record in the dataset. It is idempotent and cannot replace an unexpected third value. It becomes publishable only when a current Wind candidate passes the ordinary identity, recent-overlap, and common-date checks against the corrected history. If only cached Wind data is available, no correction is published. The normal **0.01-point** tolerance remains unchanged, and future unreviewed revisions still stop acceptance.
+
+This is **corroboration by public redistributors**, not direct confirmation from authenticated Wind. Different hosts do not prove independent upstream collection chains.
+
+### Ambiguous upstream provenance
+
+The mirror's global `source` field says `Wind AIFin 不可用，本轮为中证官网降级源（中证官网H20269(同口径)）`. H20269 is a CSI Dividend Low Volatility total-return equity index, not 885003.WI. The JSON contains multiple series and does not identify which one uses this substitute. Its revised Wind-labelled returns also do not match H20269's recent daily returns. It would therefore be unjustified to assert that the entire Wind series is H20269, or to accept the declaration as proof of equivalent methodology.
+
+The updater now rejects that ambiguous declaration even if the `885003.WI` key, name, and older anchors match. The unchanged archived fixture retains this declaration as negative regression evidence. Earlier acceptance by the parser did not authenticate the source; the three recent corrections above are supported separately by the exact-code FundDB response.
+
+Sources: [mirror JSON](https://ashare.laoqianriritan.com/data/fund_index.json), [FundDB raw history](https://ai2.jiucaishuo.com/api/index-valuation/history?code=885003.WI&metric=close&years2=10), [FundDB identity/latest-close metadata](https://ai2.jiucaishuo.com/api/index-valuation/detail?code=885003.WI), and [CSI's index fact sheet](https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/indices/detail/files/zh_CN/H30269factsheet.pdf).
+
+### Scheduling observed during this incident
+
+The requested schedule remains **00:00 UTC / 08:00 Beijing / 09:00 Korea**. The November 21–23 scheduled workflows actually started at 04:20, 03:34, and 04:06 UTC respectively. At 03:36 UTC on November 24, no November 24 run had appeared. GitHub documents that scheduled events can be delayed or dropped under load; this is separate from the data-validation rejection. Successful deployment means the page was published, not necessarily that new observations were acquired. The workflow summary now distinguishes dataset generation time from the latest source-check time and includes exact rejection messages.
+
+## Initial verification on 2026-11-20
 
 | Index and provider | Observed history/cutoff | Recent comparison |
 | --- | --- | --- |
@@ -19,7 +52,7 @@ This record describes observed responses, not guaranteed future availability.
 
 The production backup requests succeeded without credentials, login, cookies or access-control workarounds. These are public web endpoints, not contractual service APIs. No public uptime guarantee or open-data redistribution license was established by this check.
 
-## Historical discrepancies and how they are contained
+## Historical discrepancies observed on 2026-11-20
 
 The CSI backup overlaps the current published stock history on 5,313 dates. Its maximum historical difference is 0.14 point; four older dates exceed 0.01 point (2006-04-21, 2006-04-24, 2010-01-21, 2011-04-07). The most recent 60 dates agree within 0.01 point. Older backup values are never imported into published history.
 
@@ -27,7 +60,7 @@ The FundDB raw-close history overlaps on 2,414 dates. Its latest 60 *common* dat
 
 Older FundDB history contains 19 material date-alignment discrepancies in May–June 2026, an old Sunday label, and a few smaller precision differences. It is therefore unsuitable for silently replacing the full published history. The adapter retains raw source values, while the updater checks a continuous recent tail of at least 20 and at most 60 expected observations, requires maximum error no greater than 0.01 point, and only appends new dates. Any newly appended weekend, future date or mismatched common-date sequence is rejected.
 
-On the verification date both backups were behind the primaries. They are configured alternatives, not evidence that fresh data is always obtainable. An older backup is reported as older; it cannot roll the page backward. If all usable providers fail, verified cached data remains visible with a source warning and its actual data cutoff.
+On the initial verification date both backups were behind the primaries. They are configured alternatives, not evidence that fresh data is always obtainable. An older backup is reported as older; it cannot roll the page backward. If all usable providers fail, the last accepted cached data remains visible with a source warning and its actual data cutoff.
 
 ## Other candidates investigated
 

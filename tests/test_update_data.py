@@ -26,7 +26,12 @@ class UpdateDataTests(unittest.TestCase):
     def setUpClass(cls):
         fixtures = ROOT / "tests" / "fixtures"
         cls.stock = json.loads(gzip.decompress((fixtures / "stock.json.gz").read_bytes()))
-        cls.wind = json.loads(gzip.decompress((fixtures / "wind.json.gz").read_bytes()))
+        cls.archived_wind = json.loads(gzip.decompress((fixtures / "wind.json.gz").read_bytes()))
+        # Keep the ambiguous archive intact as negative evidence. Positive
+        # arithmetic/parser tests explicitly use synthetic trusted metadata;
+        # this is not a claim that the archived provider provenance was valid.
+        cls.wind = copy.deepcopy(cls.archived_wind)
+        cls.wind["source"] = "Synthetic trusted Wind 885003.WI metadata for unit tests only"
         cls.snapshot = updater.build_dataset(cls.stock, cls.wind, generated_at=NOW)
 
     def build(self, stock=None, wind=None, previous=None):
@@ -37,7 +42,7 @@ class UpdateDataTests(unittest.TestCase):
             generated_at=NOW,
         )
 
-    def test_archived_sources_baseline_returns_and_common_dates(self):
+    def test_synthetic_trusted_fixture_baseline_returns_and_common_dates(self):
         result = self.snapshot
         self.assertEqual(result["schema_version"], 1)
         self.assertEqual(result["generated_at"], "2026-11-20T04:00:00Z")
@@ -52,6 +57,25 @@ class UpdateDataTests(unittest.TestCase):
         self.assertEqual(result["sources"]["885003.WI"]["provider_note"], self.wind["source"])
         # The official stock payload includes this unmatched holiday. Do not fill it.
         self.assertNotIn("2018-06-18", {row[0] for row in result["data"]})
+
+    def test_unchanged_archive_with_ambiguous_global_provenance_is_rejected(self):
+        self.assertIn("H20269", self.archived_wind["source"])
+        # Exact series key/name and unchanged historical anchors do not resolve
+        # a global fallback declaration with no per-series provenance.
+        with self.assertRaisesRegex(updater.DataValidationError, "global source declares an H20269 fallback"):
+            updater.parse_wind(self.archived_wind, NOW.date())
+
+    def test_global_note_requires_explicit_nonfallback_wind_series_provenance(self):
+        for source in (None, "Wind unavailable; H20269 fallback", "Wind AIFin", "885003.WI fallback"):
+            with self.subTest(source=source):
+                payload = copy.deepcopy(self.archived_wind)
+                payload["series"]["885003.WI"]["source"] = source
+                with self.assertRaisesRegex(updater.DataValidationError, "per-series 885003.WI provenance"):
+                    updater.parse_wind(payload, NOW.date())
+        payload = copy.deepcopy(self.archived_wind)
+        # A synthetic positive contract test, not a change to the real archive.
+        payload["series"]["885003.WI"]["source"] = "Wind AIFin 885003.WI; synthetic provenance for unit tests"
+        self.assertEqual(updater.parse_wind(payload, NOW.date()), updater.parse_wind(self.wind, NOW.date()))
 
     def test_wrong_indices_and_changed_known_anchor_are_rejected(self):
         bad_stock = copy.deepcopy(self.stock)
