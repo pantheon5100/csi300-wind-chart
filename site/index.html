@@ -4,17 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#ffffff">
-  <meta name="description" content="沪深300全收益指数与万得偏债混合型基金指数：累计收益率、原始指数点位和原始点位差。每日更新数据。">
-  <title>沪深300全收益与万得偏债混合</title>
+  <meta name="description" content="沪深300全收益与万得偏债混合对比；上证指数、伦敦金现与恒生科技指数的长期绝对值对比。每日更新数据。">
+  <title>沪深300与万得偏债混合 · 指数与黄金对比</title>
   <link rel="stylesheet" href="./styles.css?v=20261124-source-status">
+  <link rel="stylesheet" href="./markets.css?v=20261128-markets">
   <script src="./chart-controls.js?v=20261120-refresh-zoom" defer></script>
   <script src="./app.js?v=20261124-source-status" defer></script>
+  <script src="./markets.js?v=20261128-markets" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#charts">跳到图表</a>
   <main>
     <header>
       <h1>沪深300全收益与万得偏债混合</h1>
+      <nav class="chart-nav" aria-label="图表导航"><a href="#charts">沪深300与万得</a><a href="#markets">上证、黄金与恒生科技</a></nav>
       <div class="date-row">
         <p>共同数据截至 <strong id="as-of">正在读取</strong><span id="stale-badge" class="stale" hidden></span></p>
         <button id="refresh-button" type="button" disabled>正在刷新…</button>
@@ -88,7 +91,51 @@
       </section>
     </div>
 
+    <section id="markets" class="markets-panel" aria-labelledby="markets-heading">
+      <div class="markets-heading-row">
+        <h2 id="markets-heading">上证指数 · 伦敦金现 · 恒生科技指数</h2>
+        <button id="markets-refresh-button" type="button" disabled>正在刷新…</button>
+      </div>
+      <p class="markets-intro">原始绝对值。左轴为股指点位，右轴为美元/金衡盎司；左右轴使用完全相同的数值刻度。</p>
+      <p id="markets-period" class="markets-period">正在读取长期历史数据…</p>
+      <div id="markets-latest" class="markets-latest" hidden aria-label="各来源最新日线数值">
+        <div class="markets-stat markets-sse"><p>上证指数 <span>000001.SH</span></p><strong id="markets-sse-value">—</strong><p class="markets-stat-meta">点 · <time id="markets-sse-date"></time></p></div>
+        <div class="markets-stat markets-gold"><p>伦敦金现 <span>XAU/USD 买价</span></p><strong id="markets-gold-value">—</strong><p class="markets-stat-meta">美元/金衡盎司 · <time id="markets-gold-date"></time></p></div>
+        <div class="markets-stat markets-hstech"><p>恒生科技指数 <span>HSTECH</span></p><strong id="markets-hstech-value">—</strong><p class="markets-stat-meta">点 · <time id="markets-hstech-date"></time></p></div>
+      </div>
+      <p id="markets-status" class="markets-status" role="status" aria-live="polite">正在读取数据…</p>
+      <p id="markets-source-status" class="markets-note" aria-live="polite" hidden></p>
+      <div id="markets-display" hidden>
+        <div class="markets-controls" role="group" aria-label="上证、黄金与恒生科技的显示区间">
+          <button id="markets-zoom-in" type="button">＋ 放大</button>
+          <button id="markets-zoom-out" type="button">− 缩小</button>
+          <button id="markets-earlier" type="button">更早</button>
+          <button id="markets-later" type="button">更晚</button>
+          <button id="markets-all" type="button">全部</button>
+          <button id="markets-year" type="button">近一年</button>
+          <button id="markets-latest-button" type="button">最新</button>
+        </div>
+        <p id="markets-view-range" class="markets-view-range" role="status" aria-live="polite"></p>
+        <p id="markets-help" class="markets-note">点选或悬停查看当日数值；点选后可围绕该日放大。键盘左右键查看相邻日期，Home / End 跳到区间首末日。</p>
+        <div id="markets-wrap" class="plot-wrap markets-plot-wrap">
+          <svg id="markets-chart" class="chart markets-chart" role="img" tabindex="0" aria-labelledby="markets-chart-title markets-chart-description" aria-describedby="markets-help"></svg>
+          <div id="markets-tooltip" class="tooltip markets-tooltip" hidden aria-hidden="true"></div>
+        </div>
+      </div>
+      <p class="markets-note markets-backtest-note">恒生科技指数于 2020-07-27 推出；此前的 2014-12-31—2020-07-24 为发布前回溯数据，以虚线标出。<a href="https://www.hsi.com.hk/content/dam/wpb/hsil/index/methodologies/en_hk/hstech/IM_hstech.pdf" target="_blank" rel="noopener noreferrer">恒生指数编制说明</a></p>
+      <p class="markets-note">两项股指均为价格指数。黄金为 Dukascopy XAU/USD 现货买价的 UTC 日线收盘价，非 LBMA 定盘价；按 UTC 日界线记日，周日可能只有部分交易时段。三者单位、基准与收盘时刻不同，数值相交不代表等值、等收益或估值相当。</p>
+      <ul id="markets-sources" class="markets-sources" aria-label="三资产数据来源">
+        <li><span class="markets-sse">上证指数</span>：<a id="markets-sse-source" href="https://www.csindex.com.cn/" target="_blank" rel="noopener noreferrer">中证指数官网</a><a id="markets-sse-feed" class="markets-feed" target="_blank" rel="noopener noreferrer" hidden>原始数据</a><span id="markets-sse-source-date"></span></li>
+        <li><span class="markets-gold">伦敦金现</span>：<a id="markets-gold-source" href="https://www.dukascopy.com/swiss/english/cfd/range-of-markets/gold/" target="_blank" rel="noopener noreferrer">Dukascopy XAU/USD 现货买价（日线，UTC）</a><a id="markets-gold-feed" class="markets-feed" target="_blank" rel="noopener noreferrer" hidden>原始数据</a><span id="markets-gold-source-date"></span></li>
+        <li><span class="markets-hstech">恒生科技</span>：<a id="markets-hstech-source" href="https://quote.eastmoney.com/gb/zsHSTECH.html" target="_blank" rel="noopener noreferrer">东方财富日线行情</a><a id="markets-hstech-feed" class="markets-feed" target="_blank" rel="noopener noreferrer" hidden>原始数据</a><span id="markets-hstech-source-date"></span></li>
+      </ul>
+      <p class="markets-note">保留各来源实际交易日，直线连接，不补点；提示框中无记录的日期显示“休市 / 无记录”。<a href="./markets-data.json" download="sse-gold-hstech-data.json">下载本图数据</a> · <a href="https://github.com/pantheon5100/csi300-wind-chart/blob/main/docs/markets-data-sources.md" target="_blank" rel="noopener noreferrer">数据口径与来源核验</a></p>
+      <p class="markets-note">与上方图表同一每日更新任务，计划 08:00 北京时间执行。刷新按钮读取最新已发布文件。服务器最近检查：<span id="markets-server-check">—</span>；本页最近检查：<span id="markets-browser-check">—</span>（北京时间）。</p>
+      <div id="markets-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    </section>
+
     <footer>
+      <p><strong>沪深300与万得图表口径</strong></p>
       <p>累计收益率 =（当日指数 ÷ 2004-12-31 基准日指数 − 1）× 100%。点位差 = 沪深300全收益点位 − 万得偏债混合点位，单位为指数点。</p>
       <p>原始点位是来源发布的指数数值，不是人民币金额；不同指数的点位尺度不能直接代表收益高低。</p>
       <p>万得基准日点位约为 <span id="wind-baseline">989.30</span>，由公开累计收益换算，存在四舍五入误差。万得累计收益及基准日点位差为近似值；其他日期的点位差直接使用来源收盘点位计算。</p>

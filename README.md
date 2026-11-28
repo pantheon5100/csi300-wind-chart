@@ -4,6 +4,8 @@ A simple GitHub Pages site for **沪深300全收益指数 H00300** and **万得�
 
 Live page: <https://pantheon5100.github.io/csi300-wind-chart/>.
 
+The page also includes a separate [上证指数 / 伦敦金现 / 恒生科技指数 absolute-value chart](https://pantheon5100.github.io/csi300-wind-chart/#markets), with daily history from **2014-12-31**, independent zoom controls, visible source links and daily updates. Its dataset is `site/markets-data.json`; the existing CSI300/Wind dataset and calculations remain independent.
+
 A prominent indicator at the top shows the latest signed index-point deviation, its common closing date, and which index has the higher numerical level. It updates with the published data and stays on the latest observation while older chart dates are inspected.
 
 The **刷新最新数据** button reloads the latest published dataset using a unique request URL and bypasses browser caching. Its status always reports the actual data date. A failed request or an older response preserves the newer chart already displayed. A restored browser-history page checks again. This button reads the published file; to collect new data from upstream providers immediately, use the footer's GitHub Actions link and choose **Run workflow** while signed in with repository write access.
@@ -35,6 +37,28 @@ The deviation chart marks a raw-level crossover on the **first observed daily cl
 - These markers track the ordering of the two original index levels. Their locations depend on the indices' original bases; they do not indicate equal cumulative returns, fair value, equilibrium, or a validated buy/sell rule.
 
 On the dataset through **2026-11-23**, there are **26** raw-level crossings, most recently **2014-07-24**. That crossing occurred **94 calendar days / 65 common-data observations** after the previous one on **2014-04-21**. Markers and hover intervals are calculated from the downloaded data on every page load, so future crossings appear automatically.
+
+## Shanghai, spot gold and Hang Seng TECH
+
+The additional chart plots each source's original daily close directly. It does not rebase the series or convert them into percentage returns. The left axis labels the two stock indices in **points**; the right labels spot gold in **USD per troy ounce**. Both axes use the **same numerical domain and tick marks**, including after zooming. Numerical intersections therefore cannot be moved by independently rescaling the axes, but they still do not imply equivalent valuations or investment returns across these different units.
+
+| Series | Daily observation | Source |
+| --- | --- | --- |
+| 上证指数, 000001.SH | Published price-index close, in points | [China Securities Index daily history](https://www.csindex.com.cn/csindex-home/perf/index-perf?indexCode=000001&startDate=20141231&endDate=20261127); [SSE index overview](https://www.sse.com.cn/market/sseindex/overview/) |
+| 伦敦金现货, XAU/USD | Dukascopy daily **BID** close, in USD per troy ounce, UTC bars | [Dukascopy gold quotation description](https://www.dukascopy.com/swiss/english/cfd/range-of-markets/gold/); the exact daily-feed URL is linked in the chart |
+| 恒生科技指数, HSTECH | Published price-index close, in points | [Eastmoney history](https://quote.eastmoney.com/hk/HSTECH.html), exact market code `124.HSTECH`; [Hang Seng official index page](https://www.hsi.com.hk/eng/indexes/all-indexes/index-details/?seriesCode=hstech) |
+
+**Why the history begins on 2014-12-31:** the Hang Seng TECH Index has an official base date of 2014-12-31 and a base value of 3000. It launched on 2020-07-27. The earlier observations are **pre-launch backtested history**, drawn with a dashed line and identified on the page. See the [official factsheet](https://www.hsi.com.hk/api/wsit-hsi-ddoc-ea-public-website-proxy/v1/content/gcs/download?resource=/public-website/webapp/factsheets/en-hk/hstech.pdf). No earlier HSTECH observations are invented to extend the plot.
+
+Gold uses **one consistent Dukascopy series for the entire history**. This is the vendor's XAU/USD spot/rolling-spot quotation, not an LBMA auction fixing, COMEX futures settlement, or a universal consolidated gold close. Bid/ask spreads and daily cutoffs can make it differ from another chart. The previous standalone chart used Sina's recent spot quotes; that source was not used to extend the website because parts of its older OHLC history failed consistency checks. See [the source verification record](docs/markets-data-sources.md).
+
+Each market keeps its own observation dates. The chart does not forward-fill closed-market days or delete all observations absent from another series. Dukascopy's UTC calendar can include a short Sunday trading session. Hover details show a value only when that series has a record on the selected date. Each latest-value card displays its own date; the source summary also reports the latest date available in all three series.
+
+The new section has its own **放大 / 缩小、向前 / 向后、全部、近一年、最新** controls and refresh button. The page's original **刷新最新数据** button refreshes both datasets. Opening the page, returning to it and its 24-hour check read the latest published JSON. They do not start a GitHub Actions run.
+
+The daily workflow refreshes both datasets at the existing **08:00 Beijing / 09:00 Korea** schedule. This chart uses completed dates only: equity dates before the current Beijing date and gold dates before the current UTC date. At the scheduled run these both end on the previous calendar date. Every update checks instrument identity, daily OHLC consistency, ordered dates, full history and overlap with the last published values. Existing observations are preserved exactly. An upstream change greater than 0.01 index point or 0.001 USD for gold is rejected for review; a response cannot silently shorten or roll back the history.
+
+If one of the new chart's sources fails, that series retains its last accepted data with its actual date, source-check time and failure reason. Other valid series can still advance. A holiday with unchanged valid data is a successful check, not a failed update. The current adapter for each new series uses one provider; the retained snapshot is an outage fallback, not an independent live backup provider.
 
 ## Daily refresh
 
@@ -101,6 +125,7 @@ Fetch fresh source data and run validation tests:
 
 ~~~bash
 python3 scripts/update_data.py --output site/data.json
+python3 scripts/update_markets.py --output site/markets-data.json --previous site/markets-data.json --allow-cached
 python3 -m unittest discover -s tests -v
 node --test tests/test_*.js
 ~~~
@@ -120,12 +145,15 @@ By default, the local updater returns an error if no valid live provider pair ex
 | site/index.html, site/styles.css, site/app.js | Three charts, synchronized zoom and navigation, manual refresh, crossover markers, source links and source health |
 | site/chart-controls.js | Date-window calculations, cache-bypassing request URLs and older-snapshot detection |
 | site/data.json | Index levels, cumulative returns, and source metadata |
+| site/markets.js, site/markets.css | Independent absolute-value comparison, source cards, zoom, hover and refresh |
+| site/markets-data.json | Shanghai, Dukascopy XAU/USD BID and HSTECH daily histories and source status |
 | scripts/update_data.py | Provider selection, retained history, alignment and validation |
+| scripts/update_markets.py | Independent per-market refresh, OHLC validation and retained-history checks |
 | scripts/backup_sources.py, scripts/wind_backup.py | Exact-index public backup adapters |
 | tests/ | Source parsing, outage behavior, data integrity and crossover checks |
 | .github/workflows/update-and-deploy.yml | Daily refresh and Pages deployment |
 
-The workflow uses GitHub's automatically supplied token with restricted permissions and does not commit generated data to the source repository. The live dataset is available at data.json under the published site's URL.
+The workflow uses GitHub's automatically supplied token with restricted permissions and does not commit generated data to the source repository. The live datasets are available at data.json and markets-data.json under the published site's URL.
 
 ## GitHub references
 

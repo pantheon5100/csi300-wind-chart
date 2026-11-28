@@ -18,7 +18,7 @@ jobs:
   build:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: read
@@ -40,7 +40,7 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Read the last published dataset
+      - name: Read the last published datasets
         env:
           CHART_BASE_URL: ${{ steps.pages.outputs.base_url }}
         run: |
@@ -52,28 +52,34 @@ jobs:
           from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
-          target = Path(os.environ['RUNNER_TEMP']) / 'previous-data.json'
-          url = os.environ['CHART_BASE_URL'].rstrip('/') + '/data.json?check=' + str(int(time.time()))
-          request = Request(url, headers={'User-Agent': 'CSI300-Wind-Chart/1.0', 'Cache-Control': 'no-cache'})
-          try:
-              with urlopen(request, timeout=30) as response:
-                  content = response.read(5_000_001)
-              if len(content) > 5_000_000:
-                  raise ValueError('Published dataset exceeds expected size')
-              payload = json.loads(content)
-              if payload.get('schema_version') != 1 or not payload.get('data'):
-                  raise ValueError('Published dataset has an unexpected schema')
-              target.write_bytes(content)
-              print('Comparing new data with the published dataset through', payload['as_of'])
-          except HTTPError as error:
-              if error.code != 404:
-                  raise
-              target.write_bytes(Path('site/data.json').read_bytes())
-              print('No published dataset yet; using the bundled snapshot as the minimum history')
+          for filename, required_field in [('data.json', 'data'), ('markets-data.json', 'series')]:
+              target = Path(os.environ['RUNNER_TEMP']) / ('previous-' + filename)
+              url = os.environ['CHART_BASE_URL'].rstrip('/') + '/' + filename + '?check=' + str(int(time.time()))
+              request = Request(url, headers={'User-Agent': 'CSI300-Wind-Chart/1.0', 'Cache-Control': 'no-cache'})
+              try:
+                  with urlopen(request, timeout=30) as response:
+                      content = response.read(5_000_001)
+                  if len(content) > 5_000_000:
+                      raise ValueError('Published dataset exceeds expected size: ' + filename)
+                  payload = json.loads(content)
+                  if payload.get('schema_version') != 1 or not payload.get(required_field):
+                      raise ValueError('Published dataset has an unexpected schema: ' + filename)
+                  if filename == 'markets-data.json' and payload.get('dataset_id') != 'sse-gold-hstech':
+                      raise ValueError('Unexpected market dataset identity')
+                  target.write_bytes(content)
+                  print('Comparing', filename, 'with its published dataset through', payload['as_of'])
+              except HTTPError as error:
+                  if error.code != 404:
+                      raise
+                  target.write_bytes((Path('site') / filename).read_bytes())
+                  print('No published', filename, 'yet; using its bundled snapshot as the minimum history')
           PY
 
       - name: Fetch and validate both index histories
         run: python scripts/update_data.py --output site/data.json --previous "$RUNNER_TEMP/previous-data.json" --allow-cached
+
+      - name: Fetch and validate Shanghai, spot gold and Hang Seng TECH histories
+        run: python scripts/update_markets.py --output site/markets-data.json --previous "$RUNNER_TEMP/previous-markets-data.json" --allow-cached
 
       - name: Write run summary
         run: |
@@ -101,6 +107,21 @@ jobs:
                       summary.write('- ' + change['date'] + ': ' + str(change['old']) + ' → ' + str(change['new']) + '\n')
           if data.get('update_status', {}).get('outcome') == 'cached':
               print('::warning::One or more source checks failed; the page retains its last accepted data and shows a cached-data notice.')
+          markets = json.loads(Path('site/markets-data.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('\n## Shanghai / spot gold / Hang Seng TECH\n\n')
+              summary.write('History begins: **' + markets['start_date'] + '**\n\n')
+              summary.write('Latest date with all three observations: **' + markets['common_as_of'] + '**\n\n')
+              status = markets['update_status']
+              summary.write('Source check: **' + status['outcome'] + '** at ' + status['checked_at'] + '\n\n')
+              for key, series in markets['series'].items():
+                  source = series['source']
+                  summary.write('- ' + series['name'] + ': ' + str(len(series['data'])) + ' observations, through ' + series['as_of'] + ', ' + source['mode'] + '\n')
+                  if source.get('error'):
+                      summary.write('  - ' + source['error'] + '\n')
+              summary.write('\nHSTECH before 2020-07-27 is pre-launch backtested history. All three lines retain raw daily values and individual market calendars.\n')
+          if markets['update_status']['outcome'] == 'cached':
+              print('::warning::One or more market sources failed; their retained dates and reasons are visible on the page.')
           PY
 
       - name: Upload static site
